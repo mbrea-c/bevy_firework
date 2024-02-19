@@ -1,3 +1,5 @@
+use crate::plugin::PARTICLE_SHADER_HANDLE;
+
 use super::core::{ParticleData, ParticleSpawnerData, ParticleSpawnerSettings};
 use bevy::{
     core_pipeline::{
@@ -247,8 +249,7 @@ pub struct CustomPipeline {
 
 impl FromWorld for CustomPipeline {
     fn from_world(world: &mut World) -> Self {
-        let asset_server = world.resource::<AssetServer>();
-        let vertex_shader = asset_server.load("shaders/instancing.wgsl");
+        let vertex_shader = PARTICLE_SHADER_HANDLE;
         let mesh_pipeline = world.resource::<MeshPipeline>();
 
         CustomPipeline {

@@ -5,15 +5,25 @@ use super::{
     },
     render,
 };
-use bevy::prelude::*;
+use bevy::{asset::load_internal_asset, prelude::*};
 
 #[cfg(feature = "physics_xpbd")]
 use super::core::sync_parent_velocity;
+
+pub const PARTICLE_SHADER_HANDLE: Handle<Shader> =
+    Handle::weak_from_u128(272481238906797053434642785120685433641);
 
 pub struct ParticleSystemPlugin;
 
 impl Plugin for ParticleSystemPlugin {
     fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            PARTICLE_SHADER_HANDLE,
+            "particles.wgsl",
+            Shader::from_wgsl
+        );
+
         app //
             .register_type::<ParticleSpawnerSettings>()
             .add_plugins(render::CustomMaterialPlugin)
