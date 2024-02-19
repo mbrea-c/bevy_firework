@@ -13,6 +13,8 @@ render tens of thousands of particles without noticeable framerate drops) and ma
 much of the flexibility of CPU-based particle systems (e.g. easy access to
 physics data for particle collision, simplified particle system animation).
 
+![pbr example](/pbr_example.jpg) ![sparks example](/sparks_example.jpg)
+
 ## Current features
 
 - _Billboarded_ particles.
