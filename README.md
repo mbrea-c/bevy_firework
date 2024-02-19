@@ -1,3 +1,6 @@
+![Crates.io](https://img.shields.io/crates/v/bevy_firework) ![Crates.io](https://img.shields.io/crates/d/bevy_firework)
+[![CI](https://github.com/mbrea-c/bevy_firework/actions/workflows/ci.yaml/badge.svg)](https://github.com/mbrea-c/bevy_firework/actions/workflows/ci.yaml)
+
 # Bevy Firework 🎆
 
 Bevy firework is a particle system plugin where particles are simulated on the
