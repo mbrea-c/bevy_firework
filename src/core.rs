@@ -265,7 +265,7 @@ pub fn propagate_particle_spawner_modifier(
     for (entity, modifier) in &modifiers {
         for child in children_query.iter_descendants(entity) {
             if particle_spawners.contains(child) {
-                commands.entity(child).insert(modifier.clone());
+                commands.entity(child).insert(*modifier);
             }
         }
     }
