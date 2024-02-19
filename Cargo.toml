@@ -6,7 +6,7 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mbrea-c/bevy_firework"
 description = "CPU-driven, batch-rendered particle system for the Bevy game engine"
-keywords = ["bevy", "gamedev", "particle system", "graphics"]
+keywords = ["bevy", "gamedev", "particles", "graphics"]
 
 [dependencies]
 bevy = "0.12.0"
