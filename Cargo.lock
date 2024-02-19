@@ -1012,7 +1012,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_utilitarian"
-version = "0.1.0"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03b93ae504168501a2ff97b14dd85395a7507a3147923f2264cc63aa6f0adf6d"
 dependencies = [
  "bevy",
  "rand",
