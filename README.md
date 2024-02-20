@@ -4,7 +4,7 @@
 # Bevy Firework 🎆
 
 Bevy firework is a particle system plugin where particles are simulated on the
-CPU and use GPU batching for rendering. This allows every particle system to be
+CPU and use GPU batching for rendering. This allows each particle system to be
 rendered in a single draw call (rather than one per particle).
 
 While not as fast as a pure GPU-based particle system, this provides a massive
