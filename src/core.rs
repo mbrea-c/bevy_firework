@@ -3,9 +3,34 @@ use bevy::{prelude::*, render::batching::NoAutomaticBatching};
 use bevy_utilitarian::prelude::*;
 #[cfg(feature = "physics_xpbd")]
 use bevy_xpbd_3d::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Component, Reflect, Clone)]
+/// Mirrors AlphaMode, but implements serialize and deserialize
+#[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
+pub enum BlendMode {
+    Opaque,
+    Mask(f32),
+    Blend,
+    Premultiplied,
+    Add,
+    Multiply,
+}
+
+impl From<BlendMode> for AlphaMode {
+    fn from(value: BlendMode) -> Self {
+        match value {
+            BlendMode::Opaque => AlphaMode::Opaque,
+            BlendMode::Mask(v) => AlphaMode::Mask(v),
+            BlendMode::Blend => AlphaMode::Blend,
+            BlendMode::Premultiplied => AlphaMode::Premultiplied,
+            BlendMode::Add => AlphaMode::Add,
+            BlendMode::Multiply => AlphaMode::Multiply,
+        }
+    }
+}
+
+#[derive(Component, Reflect, Clone, Debug, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct ParticleSpawnerSettings {
     /// Particles per second
@@ -33,7 +58,7 @@ pub struct ParticleSpawnerSettings {
     /// Color over lifetime
     pub color: Gradient,
     /// Alpha blend mode for the particles
-    pub blend_mode: AlphaMode,
+    pub blend_mode: BlendMode,
     /// Whether to use the PBR pipeline for the particle
     pub pbr: bool,
 }
@@ -52,7 +77,7 @@ impl Default for ParticleSpawnerSettings {
             scale_curve: ParamCurve::linear_uniform(vec![1., 1.]),
             acceleration: Vec3::new(0., -9.81, 0.),
             color: Gradient::constant(Color::WHITE.into()),
-            blend_mode: AlphaMode::Opaque,
+            blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
         }
@@ -92,26 +117,15 @@ impl From<&ParticleSpawnerSettings> for ParticleSpawnerData {
 #[derive(Bundle)]
 pub struct ParticleSpawnerBundle {
     spatial: SpatialBundle,
-    mesh: Handle<Mesh>,
     settings: ParticleSpawnerSettings,
     name: Name,
 }
 
 impl ParticleSpawnerBundle {
-    pub fn from_settings(
-        settings: ParticleSpawnerSettings,
-        meshes: &mut ResMut<Assets<Mesh>>,
-    ) -> Self {
+    pub fn from_settings(settings: ParticleSpawnerSettings) -> Self {
         Self {
             settings,
             spatial: SpatialBundle::default(),
-            mesh: meshes.add(
-                Mesh::try_from(shape::Icosphere {
-                    radius: 0.5,
-                    subdivisions: 1,
-                })
-                .unwrap(),
-            ),
             name: Name::new("Particle System"),
         }
     }

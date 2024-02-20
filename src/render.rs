@@ -70,7 +70,7 @@ impl ExtractComponent for ParticleSpawnerData {
         let (data, settings) = item;
         Some(ParticleMaterialData {
             particles: data.particles.iter().map(|p| p.into()).collect(),
-            alpha_mode: settings.blend_mode,
+            alpha_mode: settings.blend_mode.into(),
         })
     }
 }
