@@ -6,11 +6,13 @@ use bevy_xpbd_3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+pub const DEFAULT_MESH: Handle<Mesh> =
+    Handle::weak_from_u128(164408926256276437310893021157813788765);
+
 /// Mirrors AlphaMode, but implements serialize and deserialize
 #[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum BlendMode {
     Opaque,
-    Mask(f32),
     Blend,
     Premultiplied,
     Add,
@@ -21,11 +23,22 @@ impl From<BlendMode> for AlphaMode {
     fn from(value: BlendMode) -> Self {
         match value {
             BlendMode::Opaque => AlphaMode::Opaque,
-            BlendMode::Mask(v) => AlphaMode::Mask(v),
             BlendMode::Blend => AlphaMode::Blend,
             BlendMode::Premultiplied => AlphaMode::Premultiplied,
             BlendMode::Add => AlphaMode::Add,
             BlendMode::Multiply => AlphaMode::Multiply,
+        }
+    }
+}
+
+impl From<BlendMode> for u32 {
+    fn from(value: BlendMode) -> Self {
+        match value {
+            BlendMode::Opaque => 0,
+            BlendMode::Blend => 2,
+            BlendMode::Premultiplied => 3,
+            BlendMode::Add => 4,
+            BlendMode::Multiply => 5,
         }
     }
 }
@@ -118,6 +131,7 @@ impl From<&ParticleSpawnerSettings> for ParticleSpawnerData {
 pub struct ParticleSpawnerBundle {
     spatial: SpatialBundle,
     settings: ParticleSpawnerSettings,
+    mesh: Handle<Mesh>,
     name: Name,
 }
 
@@ -126,6 +140,7 @@ impl ParticleSpawnerBundle {
         Self {
             settings,
             spatial: SpatialBundle::default(),
+            mesh: DEFAULT_MESH.clone(),
             name: Name::new("Particle System"),
         }
     }
@@ -283,6 +298,13 @@ pub fn propagate_particle_spawner_modifier(
             }
         }
     }
+}
+
+pub fn setup_default_mesh(mut meshes: ResMut<Assets<Mesh>>) {
+    meshes.insert(
+        DEFAULT_MESH.clone(),
+        Mesh::from(shape::Quad::new(Vec2::new(1., 1.))),
+    );
 }
 
 #[cfg(feature = "physics_xpbd")]
