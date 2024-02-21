@@ -46,3 +46,4 @@ physics data for particle collision, simplified particle system animation).
 | `bevy_firework` | `bevy` | `bevy_utilitarian` |
 | --------------- | ------ | ------------------ |
 | 0.1             | 0.12   | 0.2                |
+| 0.2             | 0.12   | 0.3                |
