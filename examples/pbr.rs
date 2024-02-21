@@ -1,6 +1,6 @@
 use bevy::{core_pipeline::bloom::BloomSettings, prelude::*};
 use bevy_firework::{
-    core::{ParticleSpawnerBundle, ParticleSpawnerSettings},
+    core::{BlendMode, ParticleSpawnerBundle, ParticleSpawnerSettings},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
 };
@@ -64,13 +64,12 @@ fn setup(
                     (0.1, Color::rgba(0.6, 0.3, 0., 0.5).into()),
                     (1., Color::rgba(0.6, 0.3, 0., 0.0).into()),
                 ]),
-                blend_mode: AlphaMode::Blend,
+                blend_mode: BlendMode::Blend,
                 linear_drag: 0.7,
                 pbr: true,
                 acceleration: Vec3::new(0., 0.3, 0.),
                 ..default()
             },
-            &mut meshes,
         ))
         .insert(Transform::from_xyz(0., 0.1, 0.));
     // cube

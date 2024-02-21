@@ -1,12 +1,11 @@
-use std::f32::consts::PI;
-
 use bevy::{core_pipeline::bloom::BloomSettings, prelude::*};
 use bevy_firework::{
-    core::{ParticleSpawnerBundle, ParticleSpawnerSettings},
+    core::{BlendMode, ParticleSpawnerBundle, ParticleSpawnerSettings},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
 };
 use bevy_utilitarian::prelude::*;
+use std::f32::consts::PI;
 
 fn main() {
     App::new()
@@ -75,12 +74,11 @@ fn setup(
                     (0.9, Color::rgba(0.3, 0.3, 0.3, 1.).into()),
                     (1., Color::rgba(0.1, 0.1, 0.1, 0.).into()),
                 ]),
-                blend_mode: AlphaMode::Blend,
+                blend_mode: BlendMode::Blend,
                 linear_drag: 0.1,
                 pbr: false,
                 ..default()
             },
-            &mut meshes,
         ))
         .insert(Transform::from_xyz(0., 0.1, 0.));
 

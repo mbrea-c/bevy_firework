@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 use bevy_utilitarian::geometric::pitchyaw::PitchYaw;
+use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-#[derive(Default, Clone, Copy, Debug, Reflect)]
+#[derive(Default, Clone, Copy, Debug, Reflect, Serialize, Deserialize)]
 pub enum EmissionShape {
     #[default]
     Point,

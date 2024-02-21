@@ -563,6 +563,7 @@ dependencies = [
  "bevy_xpbd_3d",
  "bytemuck",
  "rand",
+ "serde",
 ]
 
 [[package]]
@@ -1012,9 +1013,9 @@ dependencies = [
 
 [[package]]
 name = "bevy_utilitarian"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03b93ae504168501a2ff97b14dd85395a7507a3147923f2264cc63aa6f0adf6d"
+checksum = "19ca22b92391a5277c3eafbd7134ef3fb3e7e32cfa1ee144f7d9cbcbe42a515d"
 dependencies = [
  "bevy",
  "rand",
@@ -3222,18 +3223,18 @@ checksum = "92d43fe69e652f3df9bdc2b85b2854a0825b86e4fb76bc44d945137d053639ca"
 
 [[package]]
 name = "serde"
-version = "1.0.196"
+version = "1.0.197"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "870026e60fa08c69f064aa766c10f10b1d62db9ccd4d0abb206472bee0ce3b32"
+checksum = "3fb1c873e1b9b056a4dc4c0c198b24c3ffa059243875552b2bd0933b1aee4ce2"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.196"
+version = "1.0.197"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33c85360c95e7d137454dc81d9a4ed2b8efd8fbe19cee57357b32b9771fccb67"
+checksum = "7eb0b34b42edc17f6b7cac84a52a1c5f0e1bb2227e997ca9011ea3dd34e8610b"
 dependencies = [
  "proc-macro2",
  "quote",

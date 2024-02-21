@@ -23,9 +23,15 @@
 struct Vertex {
     @location(3) i_pos_scale: vec4<f32>,
     @location(4) i_color: vec4<f32>,
-    @location(5) pbr: u32,
     @builtin(vertex_index) index: u32,
 };
+
+struct FireworkUniform {
+    alpha_mode: u32,
+    pbr: u32,
+}
+
+@group(1) @binding(0) var<uniform> firework_uniform: FireworkUniform;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -33,7 +39,6 @@ struct VertexOutput {
     @location(1) world_normal: vec3<f32>,
     @location(2) color: vec4<f32>,
     @location(3) uv: vec2<f32>,
-    @location(4) pbr: u32,
 };
 
 fn extract_rot(bigmat: mat4x4<f32>) -> mat3x3<f32> {
@@ -66,7 +71,6 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     out.position = position_world_to_clip(position_world);
     out.color = vertex.i_color;
     out.world_normal = direction_view_to_world(vec3(0., 0., 1.));
-    out.pbr = vertex.pbr;
     out.uv = uvs[vertex.index];
 
     return out;
@@ -83,7 +87,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> @locatio
         discard;
     }
 
-    if in.pbr == 0u {
+    if firework_uniform.pbr == 0u {
         return color;
     } else {
         return pbr_stuff(color, in.position, in.world_position, in.world_normal, in.uv, is_front);
@@ -135,7 +139,9 @@ fn pbr_stuff(
         vec3(0.,0.,1.),
 #endif
 #endif
+#ifdef VERTEX_UVS
         uv,
+#endif
         view.mip_bias,
     );
     pbr_input.V = fns::calculate_view(world_position, pbr_input.is_orthographic);

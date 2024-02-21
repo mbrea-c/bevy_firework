@@ -1,3 +1,5 @@
+use crate::core::setup_default_mesh;
+
 use super::{
     core::{
         create_spawner_data, propagate_particle_spawner_modifier, spawn_particles,
@@ -27,6 +29,7 @@ impl Plugin for ParticleSystemPlugin {
         app //
             .register_type::<ParticleSpawnerSettings>()
             .add_plugins(render::CustomMaterialPlugin)
+            .add_systems(Startup, setup_default_mesh)
             .add_systems(
                 Update,
                 (
