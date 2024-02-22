@@ -13,6 +13,7 @@ render tens of thousands of particles without noticeable framerate drops) and ma
 much of the flexibility of CPU-based particle systems (e.g. easy access to
 physics data for particle collision, simplified particle system animation).
 
+![collision example](https://github.com/mbrea-c/bevy_firework/assets/31567043/11122ee3-3b66-4d18-8afd-3e7b1cb3b617)
 ![pbr example](/pbr_example.jpg) ![sparks example](/sparks_example.jpg)
 
 ## Current features
@@ -20,6 +21,7 @@ physics data for particle collision, simplified particle system animation).
 - _Billboarded_ particles.
 - Configurable integration with Bevy's PBR rendering (i.e. particles can receive
   shadows, are affected by fog and lighting changes).
+- Particle collision with arbitrary `bevy_xpbd` colliders.
 - Soft particle edges.
 - Animated properties: certain parameters can be defined as a custom curve to
   express changes over a particle's lifetime:
