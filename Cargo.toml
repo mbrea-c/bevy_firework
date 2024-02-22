@@ -24,3 +24,11 @@ physics_xpbd = ["dep:bevy_xpbd_3d"]
 [[example]]
 name = "collision"
 required-features = ["physics_xpbd"]
+
+[[example]]
+name = "stress_test"
+required-features = ["physics_xpbd"]
+
+[[example]]
+name = "stress_test_collision"
+required-features = ["physics_xpbd"]
