@@ -7,15 +7,20 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/mbrea-c/bevy_firework"
 description = "CPU-driven, batch-rendered particle system for the Bevy game engine"
 keywords = ["bevy", "gamedev", "particles", "graphics"]
+resolver = "2"
 
 [dependencies]
 bevy = "0.12.0"
 bytemuck = "1.14.3"
 rand = "0.8.5"
 bevy_utilitarian = { version = "0.3.0" }
-bevy_xpbd_3d = { version = "0.3.0", optional = true }
+bevy_xpbd_3d = { version = "0.3.0", features = ["serialize"], optional = true }
 serde = { version = "1.0.197", features = ["derive"] }
 
 [features]
-default = ["physics_xbpd"]
-physics_xbpd = ["dep:bevy_xpbd_3d"]
+default = ["physics_xpbd"]
+physics_xpbd = ["dep:bevy_xpbd_3d"]
+
+[[example]]
+name = "collision"
+required-features = ["physics_xpbd"]

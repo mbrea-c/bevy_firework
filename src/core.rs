@@ -1,10 +1,11 @@
 use super::emission_shape::EmissionShape;
 use bevy::{prelude::*, render::batching::NoAutomaticBatching};
 use bevy_utilitarian::prelude::*;
-#[cfg(feature = "physics_xpbd")]
-use bevy_xpbd_3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+
+#[cfg(feature = "physics_xpbd")]
+use bevy_xpbd_3d::prelude::*;
 
 pub const DEFAULT_MESH: Handle<Mesh> =
     Handle::weak_from_u128(164408926256276437310893021157813788765);
@@ -74,6 +75,10 @@ pub struct ParticleSpawnerSettings {
     pub blend_mode: BlendMode,
     /// Whether to use the PBR pipeline for the particle
     pub pbr: bool,
+    #[cfg(feature = "physics_xpbd")]
+    /// If Some, particles will collide with the scene according to the provided parameters
+    /// If None, no particle collision will occur.
+    pub collision_settings: Option<ParticleCollisionSettings>,
 }
 
 impl Default for ParticleSpawnerSettings {
@@ -93,7 +98,28 @@ impl Default for ParticleSpawnerSettings {
             blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
+            #[cfg(feature = "physics_xpbd")]
+            collision_settings: None,
         }
+    }
+}
+
+#[cfg(feature = "physics_xpbd")]
+#[derive(Reflect, Clone, Serialize, Deserialize)]
+pub struct ParticleCollisionSettings {
+    pub restitution: f32,
+    pub friction: f32,
+    #[reflect(ignore)]
+    pub filter: SpatialQueryFilter,
+}
+
+impl std::fmt::Debug for ParticleCollisionSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "ParticleCollisionSettings {{ elasticity: {:?} }}",
+            self.restitution
+        )
     }
 }
 
@@ -222,6 +248,7 @@ pub fn spawn_particles(
 
             let modifier = opt_modifier.cloned().unwrap_or_default();
             let origin = global_transform.compute_transform();
+
             for _ in 0..particles_to_spawn {
                 let spawn_offset = settings.emission_shape.generate_point();
 
@@ -255,34 +282,60 @@ pub fn spawn_particles(
 pub fn update_particles(
     mut particle_systems_query: Query<(&ParticleSpawnerSettings, &mut ParticleSpawnerData)>,
     time: Res<Time>,
+    #[cfg(feature = "physics_xpbd")] spatial_query: SpatialQuery,
 ) {
-    for (settings, mut data) in &mut particle_systems_query {
-        data.particles = data
-            .particles
-            .iter()
-            .filter_map(|particle| {
-                let mut particle = *particle;
+    particle_systems_query
+        .par_iter_mut()
+        .for_each(|(settings, mut data)| {
+            data.particles = data
+                .particles
+                .iter()
+                .filter_map(|particle| {
+                    let mut particle = *particle;
 
-                particle.age += time.delta_seconds();
-                if particle.age >= particle.lifetime {
-                    return None;
-                }
+                    particle.age += time.delta_seconds();
+                    if particle.age >= particle.lifetime {
+                        return None;
+                    }
 
-                let age_percent = particle.age / particle.lifetime;
-                let scale_factor = settings.scale_curve.get(age_percent);
+                    let age_percent = particle.age / particle.lifetime;
+                    let scale_factor = settings.scale_curve.get(age_percent);
 
-                particle.scale = particle.initial_scale * scale_factor;
+                    particle.scale = particle.initial_scale * scale_factor;
 
-                particle.position += particle.velocity * time.delta_seconds();
-                particle.velocity += (settings.acceleration
-                    - particle.velocity * settings.linear_drag)
-                    * time.delta_seconds();
-                particle.color = *settings.color.get(age_percent);
+                    #[cfg(feature = "physics_xpbd")]
+                    let (new_pos, new_vel) =
+                        if let Some(collision_settigs) = &settings.collision_settings {
+                            particle_collision(
+                                particle.position,
+                                particle.velocity,
+                                time.delta_seconds(),
+                                collision_settigs,
+                                &spatial_query,
+                            )
+                        } else {
+                            (
+                                particle.position + particle.velocity * time.delta_seconds(),
+                                particle.velocity,
+                            )
+                        };
+                    #[cfg(not(feature = "physics_xpbd"))]
+                    let (new_pos, new_vel) = (
+                        particle.position + particle.velocity * time.delta_seconds(),
+                        particle.velocity,
+                    );
 
-                Some(particle)
-            })
-            .collect();
-    }
+                    particle.position = new_pos;
+                    particle.velocity = new_vel;
+                    particle.velocity += (settings.acceleration
+                        - particle.velocity * settings.linear_drag)
+                        * time.delta_seconds();
+                    particle.color = *settings.color.get(age_percent);
+
+                    Some(particle)
+                })
+                .collect();
+        });
 }
 
 pub fn propagate_particle_spawner_modifier(
@@ -344,4 +397,42 @@ pub fn sync_parent_velocity(
 /// All quantities are in world-space
 fn linear_velocity_at_point(linvel: Vec3, angvel: Vec3, point: Vec3, center_of_mass: Vec3) -> Vec3 {
     linvel + angvel.cross(point - center_of_mass)
+}
+
+#[cfg(feature = "physics_xpbd")]
+fn particle_collision(
+    mut pos: Vec3,
+    mut vel: Vec3,
+    mut delta: f32,
+    collision_settings: &ParticleCollisionSettings,
+    spatial_query: &SpatialQuery,
+) -> (Vec3, Vec3) {
+    let orig_delta = delta;
+    let mut n_steps = 0;
+    while delta > 0. && n_steps < 4 {
+        if let Some(hit) = spatial_query.cast_ray(
+            pos,
+            vel.normalize_or_zero(),
+            vel.length() * delta,
+            false,
+            collision_settings.filter.clone(),
+        ) {
+            pos = pos + vel.normalize_or_zero() * hit.time_of_impact;
+            let vel_reject = vel.reject_from(hit.normal);
+            let vel_project = vel.project_onto(hit.normal);
+            let friction_dv =
+                vel_project.length().min(vel_reject.length()) * collision_settings.friction;
+            vel = vel_reject
+                - (friction_dv * vel_reject.normalize_or_zero())
+                - collision_settings.restitution * vel_project;
+            pos += vel * 0.0001;
+            delta = (delta - hit.time_of_impact).clamp(0., orig_delta);
+        } else {
+            pos += vel * delta;
+            delta = 0.;
+        }
+        n_steps += 1;
+    }
+
+    (pos, vel)
 }
