@@ -7,7 +7,7 @@ use super::{
     },
     render,
 };
-use bevy::{asset::load_internal_asset, prelude::*};
+use bevy::{asset::load_internal_asset, prelude::*, transform::TransformSystem};
 
 #[cfg(feature = "physics_xpbd")]
 use super::core::sync_parent_velocity;
@@ -39,10 +39,14 @@ impl Plugin for ParticleSystemPlugin {
                     sync_spawner_data,
                     #[cfg(feature = "physics_xpbd")]
                     sync_parent_velocity,
-                    spawn_particles,
-                    update_particles,
                 )
                     .chain(),
+            )
+            .add_systems(
+                PostUpdate,
+                (spawn_particles, update_particles)
+                    .chain()
+                    .after(TransformSystem::TransformPropagate),
             );
     }
 }

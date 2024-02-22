@@ -461,6 +461,7 @@ dependencies = [
  "bevy_tasks",
  "bevy_utils",
  "bytemuck",
+ "serde",
 ]
 
 [[package]]
@@ -658,6 +659,7 @@ dependencies = [
  "bevy_math",
  "bevy_reflect",
  "bevy_utils",
+ "serde",
  "thiserror",
 ]
 
@@ -964,6 +966,7 @@ dependencies = [
  "bevy_reflect",
  "bevy_utils",
  "crossbeam-channel",
+ "serde",
  "thiserror",
 ]
 
@@ -978,6 +981,7 @@ dependencies = [
  "bevy_hierarchy",
  "bevy_math",
  "bevy_reflect",
+ "serde",
  "thiserror",
 ]
 
@@ -1065,6 +1069,7 @@ dependencies = [
  "bevy_reflect",
  "bevy_utils",
  "raw-window-handle",
+ "serde",
 ]
 
 [[package]]
@@ -1094,9 +1099,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_xpbd_3d"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35590e6cb2860b6a548a37e776dd36ae1aee5c669169caa130f0038a0453ade2"
+version = "0.3.2"
 dependencies = [
  "bevy",
  "bevy_xpbd_derive",
@@ -1108,13 +1111,12 @@ dependencies = [
  "nalgebra",
  "parry3d",
  "parry3d-f64",
+ "serde",
 ]
 
 [[package]]
 name = "bevy_xpbd_derive"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e1ef1d5e328abe1b76df974245f78e17fd17867583883d5e77444c6a8223a64"
 dependencies = [
  "quote",
  "syn 2.0.49",
@@ -2471,6 +2473,7 @@ dependencies = [
  "num-complex",
  "num-rational",
  "num-traits",
+ "serde",
  "simba",
  "typenum",
 ]
@@ -2579,6 +2582,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23c6602fda94a57c990fe0df199a035d83576b496aa29f4e634a8ac6004e68a6"
 dependencies = [
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -2836,6 +2840,7 @@ dependencies = [
  "num-traits",
  "rayon",
  "rustc-hash",
+ "serde",
  "simba",
  "slab",
  "smallvec",
@@ -2858,6 +2863,7 @@ dependencies = [
  "num-traits",
  "rayon",
  "rustc-hash",
+ "serde",
  "simba",
  "slab",
  "smallvec",
