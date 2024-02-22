@@ -75,6 +75,7 @@ impl ExtractComponent for ParticleSpawnerData {
             FireworkUniform {
                 alpha_mode: settings.blend_mode.into(),
                 pbr: settings.pbr.into(),
+                _wasm_padding: Vec2::ZERO,
             },
         ))
     }
@@ -258,6 +259,7 @@ pub struct FireworkUniformBindgroup {
 pub struct FireworkUniform {
     alpha_mode: u32,
     pbr: u32,
+    _wasm_padding: Vec2,
 }
 
 pub fn prepare_firework_bindgroup(

@@ -29,6 +29,7 @@ struct Vertex {
 struct FireworkUniform {
     alpha_mode: u32,
     pbr: u32,
+    _wasm_padding: vec2<f32>,
 }
 
 @group(1) @binding(0) var<uniform> firework_uniform: FireworkUniform;

@@ -22,6 +22,7 @@ physics data for particle collision, simplified particle system animation).
 - Configurable integration with Bevy's PBR rendering (i.e. particles can receive
   shadows, are affected by fog and lighting changes).
 - Particle collision with arbitrary `bevy_xpbd` colliders.
+- WASM and WebGL compatible.
 - Soft particle edges.
 - Animated properties: certain parameters can be defined as a custom curve to
   express changes over a particle's lifetime:
