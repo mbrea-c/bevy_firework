@@ -113,6 +113,7 @@ pub struct ParticleCollisionSettings {
     pub filter: SpatialQueryFilter,
 }
 
+#[cfg(feature = "physics_xpbd")]
 impl std::fmt::Debug for ParticleCollisionSettings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(

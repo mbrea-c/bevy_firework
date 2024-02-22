@@ -7,12 +7,16 @@ use bevy_firework::{
 use bevy_utilitarian::prelude::*;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins)
         .add_plugins(ParticleSystemPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, adjust_time_scale)
-        .run();
+        .add_systems(Update, adjust_time_scale);
+
+    #[cfg(feature = "physics_xpbd")]
+    app.add_plugins(bevy_xpbd_3d::prelude::PhysicsPlugins::default());
+
+    app.run();
 }
 
 /// set up a simple 3D scene
