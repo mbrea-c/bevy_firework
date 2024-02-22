@@ -417,7 +417,7 @@ fn particle_collision(
             false,
             collision_settings.filter.clone(),
         ) {
-            pos = pos + vel.normalize_or_zero() * hit.time_of_impact;
+            pos += vel.normalize_or_zero() * hit.time_of_impact;
             let vel_reject = vel.reject_from(hit.normal);
             let vel_project = vel.project_onto(hit.normal);
             let friction_dv =
