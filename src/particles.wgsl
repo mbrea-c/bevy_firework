@@ -29,10 +29,20 @@ struct Vertex {
 struct FireworkUniform {
     alpha_mode: u32,
     pbr: u32,
-    _wasm_padding: vec2<f32>,
+    fade_edge: f32,
+    fade_scene: f32,
 }
 
 @group(1) @binding(0) var<uniform> firework_uniform: FireworkUniform;
+
+#ifdef DEPTH_PREPASS
+#ifdef MULTISAMPLED
+@group(1) @binding(1) var depth_prepass_texture: texture_depth_multisampled_2d;
+#else // MULTISAMPLED
+@group(1) @binding(1) var depth_prepass_texture: texture_depth_2d;
+#endif // MULTISAMPLED
+#endif // DEPTH_PREPASS
+
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -79,10 +89,23 @@ fn vertex(vertex: Vertex) -> VertexOutput {
 
 @fragment
 fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> @location(0) vec4<f32> {
-    let vec_to_center = in.uv - vec2(0.5, 0.5);
-    let dist_to_center = length(vec_to_center) * 2.;
     var color = in.color;
-    color.a *= sqrt(clamp(1. - dist_to_center, 0., 1.));
+
+    if firework_uniform.fade_edge > 0. {
+        let vec_to_center = in.uv - vec2(0.5, 0.5);
+        let dist_to_center = length(vec_to_center) * 2.;
+        let dist_from_edge = clamp(1. - dist_to_center, 0., 1.);
+        let edge_blend = smoothstep(0., firework_uniform.fade_edge, dist_from_edge);
+        color.a *= edge_blend;
+    }
+
+#ifdef DEPTH_PREPASS
+    let depth_scene = prepass_depth(in.position, 0u);
+    let diff = abs(1. / in.position.z - 1. / depth_scene);
+    let scene_blend = smoothstep(0., firework_uniform.fade_scene, diff);
+    color.a *= scene_blend;
+#endif
+
 
     if color.a == 0. {
         discard;
@@ -160,3 +183,12 @@ fn pbr_stuff(
     return out;
 }
 
+#ifdef DEPTH_PREPASS
+fn prepass_depth(frag_coord: vec4<f32>, sample_index: u32) -> f32 {
+#ifdef MULTISAMPLED
+    return textureLoad(depth_prepass_texture, vec2<i32>(frag_coord.xy), i32(sample_index));
+#else // MULTISAMPLED
+    return textureLoad(depth_prepass_texture, vec2<i32>(frag_coord.xy), 0);
+#endif // MULTISAMPLED
+}
+#endif // DEPTH_PREPASS

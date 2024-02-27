@@ -4,7 +4,9 @@ use super::core::{ParticleData, ParticleSpawnerData, ParticleSpawnerSettings};
 use bevy::{
     core_pipeline::{
         core_3d::{Transparent3d, CORE_3D_DEPTH_FORMAT},
-        prepass::{DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass},
+        prepass::{
+            DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass, ViewPrepassTextures,
+        },
     },
     ecs::{
         query::QueryItem,
@@ -75,11 +77,15 @@ impl ExtractComponent for ParticleSpawnerData {
             FireworkUniform {
                 alpha_mode: settings.blend_mode.into(),
                 pbr: settings.pbr.into(),
-                _wasm_padding: Vec2::ZERO,
+                fade_edge: settings.fade_edge,
+                fade_scene: settings.fade_scene,
             },
         ))
     }
 }
+
+#[derive(Resource)]
+pub struct DummyDepthTexture(pub TextureView);
 
 pub struct CustomMaterialPlugin;
 
@@ -103,9 +109,45 @@ impl Plugin for CustomMaterialPlugin {
     }
 
     fn finish(&self, app: &mut App) {
+        let msaa_samples = app
+            .world
+            .get_resource::<Msaa>()
+            .map(|msaa| msaa.samples())
+            .unwrap_or(1);
+
         let render_app = app.sub_app_mut(RenderApp);
         let firework_uniform_layout =
             FireworkUniformBindgroupLayout::create(render_app.world.resource::<RenderDevice>());
+        let dummy_texture = render_app
+            .world
+            .resource::<RenderDevice>()
+            .create_texture(&TextureDescriptor {
+                label: Some("Dummy Depth Texture"),
+                size: Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: msaa_samples,
+                dimension: TextureDimension::D2,
+                format: TextureFormat::Depth32Float,
+                usage: TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::RENDER_ATTACHMENT
+                    | TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+            .create_view(&TextureViewDescriptor {
+                label: None,
+                format: None,
+                dimension: None,
+                aspect: TextureAspect::DepthOnly,
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                base_array_layer: 0,
+                array_layer_count: Some(1),
+            });
+        render_app.insert_resource(DummyDepthTexture(dummy_texture));
         render_app.insert_resource(firework_uniform_layout);
         render_app.init_resource::<FireworkPipeline>();
     }
@@ -234,23 +276,36 @@ impl FireworkUniformBindgroupLayout {
     pub fn create(render_device: &RenderDevice) -> Self {
         let layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Firework Uniform Layout"),
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX_FRAGMENT,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: true,
-                    min_binding_size: Some(FireworkUniform::min_size()),
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX_FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: true,
+                        min_binding_size: Some(FireworkUniform::min_size()),
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                // The depth texture
+                BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Texture {
+                        sample_type: TextureSampleType::Depth,
+                        view_dimension: TextureViewDimension::D2,
+                        multisampled: true,
+                    },
+                    count: None,
+                },
+            ],
         });
 
         Self { layout }
     }
 }
 
-#[derive(Resource)]
+#[derive(Component)]
 pub struct FireworkUniformBindgroup {
     bindgroup: BindGroup,
 }
@@ -259,7 +314,8 @@ pub struct FireworkUniformBindgroup {
 pub struct FireworkUniform {
     alpha_mode: u32,
     pbr: u32,
-    _wasm_padding: Vec2,
+    fade_edge: f32,
+    fade_scene: f32,
 }
 
 pub fn prepare_firework_bindgroup(
@@ -267,15 +323,35 @@ pub fn prepare_firework_bindgroup(
     firework_uniform_bindgroup_layout: Res<FireworkUniformBindgroupLayout>,
     render_device: Res<RenderDevice>,
     firework_uniforms: Res<ComponentUniforms<FireworkUniform>>,
+    dummy_depth_texture: Res<DummyDepthTexture>,
+    view_query: Query<(Entity, Option<&ViewPrepassTextures>), With<ViewTarget>>,
 ) {
     if let Some(binding) = firework_uniforms.uniforms().binding() {
-        commands.insert_resource(FireworkUniformBindgroup {
-            bindgroup: render_device.create_bind_group(
-                "Firework Uniform Bindgroup",
-                &firework_uniform_bindgroup_layout.layout,
-                &BindGroupEntries::single(binding),
-            ),
-        })
+        for (entity, view_prepass_textures_opt) in &view_query {
+            let mut entries = vec![BindGroupEntry {
+                binding: 0,
+                resource: binding.clone(),
+            }];
+            if let Some(depth) = view_prepass_textures_opt.and_then(|vpt| vpt.depth.as_ref()) {
+                entries.push(BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&depth.default_view),
+                });
+            } else {
+                // Push a dummy depth texture view
+                entries.push(BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(&dummy_depth_texture.0),
+                });
+            }
+            commands.entity(entity).insert(FireworkUniformBindgroup {
+                bindgroup: render_device.create_bind_group(
+                    "Firework Uniform Bindgroup",
+                    &firework_uniform_bindgroup_layout.layout,
+                    &entries,
+                ),
+            });
+        }
     }
 }
 
@@ -340,6 +416,15 @@ impl SpecializedRenderPipeline for FireworkPipeline {
             TextureFormat::bevy_default()
         };
 
+        let mut shader_defs = vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()];
+
+        if key.msaa_samples() > 1 {
+            shader_defs.push("MULTISAMPLED".into());
+        }
+        if key.contains(MeshPipelineKey::DEPTH_PREPASS) {
+            shader_defs.push("DEPTH_PREPASS".into());
+        }
+
         // Ok(descriptor)
         RenderPipelineDescriptor {
             label: Some("Firework Pipeline".into()),
@@ -350,7 +435,7 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                 // meshes typically live in bind group 2. because we are using bindgroup 1
                 // we need to add MESH_BINDGROUP_1 shader def so that the bindings are correctly
                 // linked in the shader
-                shader_defs: vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()],
+                shader_defs: shader_defs.clone(),
                 entry_point: "vertex".into(),
                 buffers: vec![VertexBufferLayout {
                     array_stride: std::mem::size_of::<ParticleInstance>() as u64,
@@ -379,7 +464,7 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                 // meshes typically live in bind group 2. because we are using bindgroup 1
                 // we need to add MESH_BINDGROUP_1 shader def so that the bindings are correctly
                 // linked in the shader
-                shader_defs: vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()],
+                shader_defs,
                 entry_point: "fragment".into(),
                 targets: vec![Some(ColorTargetState {
                     format,
@@ -414,22 +499,18 @@ type DrawCustom = (
 
 pub struct SetFireworkBindGroup<const I: usize>;
 impl<const I: usize, P: PhaseItem> RenderCommand<P> for SetFireworkBindGroup<I> {
-    type Param = SRes<FireworkUniformBindgroup>;
-    type ViewWorldQuery = ();
+    type Param = ();
+    type ViewWorldQuery = &'static FireworkUniformBindgroup;
     type ItemWorldQuery = Read<DynamicUniformIndex<FireworkUniform>>;
 
     fn render<'w>(
         _item: &P,
-        _view: bevy::ecs::query::ROQueryItem<'w, Self::ViewWorldQuery>,
+        firework_bindgroup: bevy::ecs::query::ROQueryItem<'w, Self::ViewWorldQuery>,
         uniform_index: bevy::ecs::query::ROQueryItem<'w, Self::ItemWorldQuery>,
-        bind_group: SystemParamItem<'w, '_, Self::Param>,
+        _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_bind_group(
-            I,
-            &bind_group.into_inner().bindgroup,
-            &[uniform_index.index()],
-        );
+        pass.set_bind_group(I, &firework_bindgroup.bindgroup, &[uniform_index.index()]);
         RenderCommandResult::Success
     }
 }
