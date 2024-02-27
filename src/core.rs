@@ -71,6 +71,12 @@ pub struct ParticleSpawnerSettings {
     pub linear_drag: f32,
     /// Color over lifetime
     pub color: Gradient,
+    /// Round out the particle with fading at the edges. If 0, no fading is applied. The value
+    /// should be between 0 and 1.
+    pub fade_edge: f32,
+    /// Fade out at the intersections between particles and the scene to avoid sharp edges.
+    /// The larger the value, the longer the fade range.
+    pub fade_scene: f32,
     /// Alpha blend mode for the particles
     pub blend_mode: BlendMode,
     /// Whether to use the PBR pipeline for the particle
@@ -100,6 +106,8 @@ impl Default for ParticleSpawnerSettings {
             pbr: false,
             #[cfg(feature = "physics_xpbd")]
             collision_settings: None,
+            fade_edge: 0.7,
+            fade_scene: 1.,
         }
     }
 }
@@ -413,21 +421,33 @@ fn particle_collision(
     while delta > 0. && n_steps < 4 {
         if let Some(hit) = spatial_query.cast_ray(
             pos,
-            vel.normalize_or_zero(),
+            vel.try_normalize().unwrap_or(Vec3::Y),
             vel.length() * delta,
-            false,
+            true,
             collision_settings.filter.clone(),
         ) {
-            pos += vel.normalize_or_zero() * hit.time_of_impact;
-            let vel_reject = vel.reject_from(hit.normal);
-            let vel_project = vel.project_onto(hit.normal);
-            let friction_dv =
-                vel_project.length().min(vel_reject.length()) * collision_settings.friction;
-            vel = vel_reject
-                - (friction_dv * vel_reject.normalize_or_zero())
-                - collision_settings.restitution * vel_project;
-            pos += vel * 0.0001;
-            delta = (delta - hit.time_of_impact).clamp(0., orig_delta);
+            if hit.time_of_impact == 0. {
+                let mut normal = hit.normal;
+                if normal == Vec3::ZERO {
+                    if vel != Vec3::ZERO {
+                        normal = vel.normalize();
+                    } else {
+                        normal = Vec3::Y;
+                    }
+                }
+                pos += vel.length().max(1.) * normal * delta;
+            } else {
+                pos += vel.normalize_or_zero() * hit.time_of_impact;
+                let vel_reject = vel.reject_from(hit.normal);
+                let vel_project = vel.project_onto(hit.normal);
+                let friction_dv =
+                    vel_project.length().min(vel_reject.length()) * collision_settings.friction;
+                vel = vel_reject
+                    - (friction_dv * vel_reject.normalize_or_zero())
+                    - collision_settings.restitution * vel_project;
+                pos += hit.normal * 0.0001;
+                delta = (delta - hit.time_of_impact).clamp(0., orig_delta);
+            }
         } else {
             pos += vel * delta;
             delta = 0.;

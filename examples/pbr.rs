@@ -1,4 +1,7 @@
-use bevy::{core_pipeline::bloom::BloomSettings, prelude::*};
+use bevy::{
+    core_pipeline::{bloom::BloomSettings, prepass::DepthPrepass},
+    prelude::*,
+};
 use bevy_firework::{
     core::{BlendMode, ParticleSpawnerBundle, ParticleSpawnerSettings},
     emission_shape::EmissionShape,
@@ -61,7 +64,7 @@ fn setup(
                 lifetime: RandF32::constant(5.),
                 inherit_parent_velocity: true,
                 initial_velocity: RandVec3::constant(Vec3::ZERO),
-                initial_scale: RandF32 { min: 0.3, max: 0.8 },
+                initial_scale: RandF32 { min: 0.5, max: 1.3 },
                 scale_curve: ParamCurve::linear_uniform(vec![1., 2.]),
                 color: Gradient::linear(vec![
                     (0., Color::rgba(0.6, 0.3, 0., 0.).into()),
@@ -72,6 +75,7 @@ fn setup(
                 linear_drag: 0.7,
                 pbr: true,
                 acceleration: Vec3::new(0., 0.3, 0.),
+                fade_scene: 3.5,
                 ..default()
             },
         ))
@@ -106,6 +110,7 @@ fn setup(
             ..default()
         },
         BloomSettings::default(),
+        DepthPrepass::default(),
     ));
 }
 
