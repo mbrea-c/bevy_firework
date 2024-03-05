@@ -47,7 +47,7 @@ impl From<&ParticleData> for ParticleInstance {
         Self {
             position: value.position,
             scale: value.scale,
-            color: value.color.into(),
+            color: value.color.as_linear_rgba_f32(),
         }
     }
 }
@@ -60,14 +60,14 @@ pub struct ParticleMaterialData {
 }
 
 impl ExtractComponent for ParticleSpawnerData {
-    type Query = (
+    type QueryData = (
         &'static ParticleSpawnerData,
         &'static ParticleSpawnerSettings,
     );
-    type Filter = ();
+    type QueryFilter = ();
     type Out = (ParticleMaterialData, FireworkUniform);
 
-    fn extract_component(item: QueryItem<'_, Self::Query>) -> Option<Self::Out> {
+    fn extract_component(item: QueryItem<'_, Self::QueryData>) -> Option<Self::Out> {
         let (data, settings) = item;
         Some((
             ParticleMaterialData {
@@ -274,9 +274,9 @@ pub struct FireworkUniformBindgroupLayout {
 
 impl FireworkUniformBindgroupLayout {
     pub fn create(render_device: &RenderDevice) -> Self {
-        let layout = render_device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Firework Uniform Layout"),
-            entries: &[
+        let layout = render_device.create_bind_group_layout(
+            Some("Firework Uniform Layout"),
+            &[
                 BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::VERTEX_FRAGMENT,
@@ -299,7 +299,7 @@ impl FireworkUniformBindgroupLayout {
                     count: None,
                 },
             ],
-        });
+        );
 
         Self { layout }
     }
@@ -335,7 +335,7 @@ pub fn prepare_firework_bindgroup(
             if let Some(depth) = view_prepass_textures_opt.and_then(|vpt| vpt.depth.as_ref()) {
                 entries.push(BindGroupEntry {
                     binding: 1,
-                    resource: BindingResource::TextureView(&depth.default_view),
+                    resource: BindingResource::TextureView(&depth.texture.default_view),
                 });
             } else {
                 // Push a dummy depth texture view
@@ -500,17 +500,21 @@ type DrawCustom = (
 pub struct SetFireworkBindGroup<const I: usize>;
 impl<const I: usize, P: PhaseItem> RenderCommand<P> for SetFireworkBindGroup<I> {
     type Param = ();
-    type ViewWorldQuery = &'static FireworkUniformBindgroup;
-    type ItemWorldQuery = Read<DynamicUniformIndex<FireworkUniform>>;
+    type ViewQuery = &'static FireworkUniformBindgroup;
+    type ItemQuery = Read<DynamicUniformIndex<FireworkUniform>>;
 
     fn render<'w>(
         _item: &P,
-        firework_bindgroup: bevy::ecs::query::ROQueryItem<'w, Self::ViewWorldQuery>,
-        uniform_index: bevy::ecs::query::ROQueryItem<'w, Self::ItemWorldQuery>,
+        firework_bindgroup: bevy::ecs::query::ROQueryItem<'w, Self::ViewQuery>,
+        uniform_index: bevy::ecs::query::ROQueryItem<'w, Option<Self::ItemQuery>>,
         _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_bind_group(I, &firework_bindgroup.bindgroup, &[uniform_index.index()]);
+        pass.set_bind_group(
+            I,
+            &firework_bindgroup.bindgroup,
+            &[uniform_index.unwrap().index()],
+        );
         RenderCommandResult::Success
     }
 }
@@ -519,20 +523,20 @@ pub struct DrawFirework;
 
 impl<P: PhaseItem> RenderCommand<P> for DrawFirework {
     type Param = ();
-    type ViewWorldQuery = ();
-    type ItemWorldQuery = Read<InstanceBuffer>;
+    type ViewQuery = ();
+    type ItemQuery = Read<InstanceBuffer>;
 
     #[inline]
     fn render<'w>(
         _item: &P,
         _view: (),
-        instance_buffer: &'w InstanceBuffer,
+        instance_buffer: Option<&'w InstanceBuffer>,
         _: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_vertex_buffer(0, instance_buffer.buffer.slice(..));
+        pass.set_vertex_buffer(0, instance_buffer.unwrap().buffer.slice(..));
 
-        pass.draw(0..6, 0..instance_buffer.length as u32);
+        pass.draw(0..6, 0..instance_buffer.unwrap().length as u32);
         RenderCommandResult::Success
     }
 }

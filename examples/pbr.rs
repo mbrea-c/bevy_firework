@@ -47,8 +47,8 @@ fn setup(
 
     // circular base
     commands.spawn(PbrBundle {
-        mesh: meshes.add(shape::Circle::new(4.0).into()),
-        material: materials.add(Color::WHITE.into()),
+        mesh: meshes.add(Circle::new(4.0)),
+        material: materials.add(Color::WHITE),
         transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         ..default()
     });
@@ -82,8 +82,8 @@ fn setup(
         .insert(Transform::from_xyz(0., 0.1, 0.));
     // cube
     commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
+        mesh: meshes.add(Cuboid::from_size(Vec3::ONE)),
+        material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
         transform: Transform::from_xyz(1.0, 1.5, 0.0),
         ..default()
     });
@@ -91,7 +91,7 @@ fn setup(
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 1500.0,
+            intensity: 1500000.0,
             shadows_enabled: true,
             ..default()
         },
@@ -117,7 +117,7 @@ fn setup(
 fn adjust_time_scale(
     mut slowmo: Local<bool>,
     mut time: ResMut<Time<Virtual>>,
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
 ) {
     if input.just_pressed(KeyCode::Space) {
         *slowmo = !*slowmo;
