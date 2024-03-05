@@ -98,8 +98,8 @@ fn setup(
 
     // circular base
     commands.spawn(PbrBundle {
-        mesh: meshes.add(shape::Circle::new(4.0).into()),
-        material: materials.add(Color::WHITE.into()),
+        mesh: meshes.add(Circle::new(4.0)),
+        material: materials.add(Color::WHITE),
         transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
         ..default()
     });
@@ -125,7 +125,7 @@ fn setup(
                 },
                 scale_curve: ParamCurve::constant(1.),
                 color: Gradient::linear(vec![
-                    (0., Color::rgba(300., 100., 1., 1.).into()),
+                    (0., Color::rgba(10., 7., 1., 1.).into()),
                     (0.7, Color::rgba(3., 1., 1., 1.).into()),
                     (0.8, Color::rgba(1., 0.3, 0.3, 1.).into()),
                     (0.9, Color::rgba(0.3, 0.3, 0.3, 1.).into()),
@@ -142,7 +142,7 @@ fn setup(
     // light
     commands.spawn(PointLightBundle {
         point_light: PointLight {
-            intensity: 1500.0,
+            intensity: 1500000.0,
             shadows_enabled: true,
             ..default()
         },
@@ -167,7 +167,7 @@ fn setup(
 fn adjust_time_scale(
     mut slowmo: Local<bool>,
     mut time: ResMut<Time<Virtual>>,
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
 ) {
     if input.just_pressed(KeyCode::Space) {
         *slowmo = !*slowmo;
@@ -190,7 +190,7 @@ fn update_debug_info_text(
 }
 
 fn update_fps(mut debug_info: ResMut<DebugInfo>, diagnostics: Res<DiagnosticsStore>) {
-    if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
         if let Some(value) = fps.smoothed() {
             debug_info.fps = value as f32;
         }

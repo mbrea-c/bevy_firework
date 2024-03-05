@@ -1,6 +1,6 @@
 [package]
 name = "bevy_firework"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
@@ -10,11 +10,11 @@ keywords = ["bevy", "gamedev", "particles", "graphics"]
 resolver = "2"
 
 [dependencies]
-bevy = "0.12.0"
+bevy = "0.13"
 bytemuck = "1.14.3"
 rand = "0.8.5"
-bevy_utilitarian = { version = "0.3.0" }
-bevy_xpbd_3d = { version = "0.3.0", features = ["serialize"], optional = true }
+bevy_utilitarian = { git="https://github.com/Affinator/bevy_utilitarian", branch="bevy_0.13"}
+bevy_xpbd_3d = { version = "0.4", features = ["serialize"], optional = true }
 serde = { version = "1.0.197", features = ["derive"] }
 
 [features]

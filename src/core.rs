@@ -365,7 +365,7 @@ pub fn propagate_particle_spawner_modifier(
 pub fn setup_default_mesh(mut meshes: ResMut<Assets<Mesh>>) {
     meshes.insert(
         DEFAULT_MESH.clone(),
-        Mesh::from(shape::Quad::new(Vec2::new(1., 1.))),
+        Rectangle::from_size(Vec2::new(1., 1.)).mesh()
     );
 }
 
@@ -421,7 +421,10 @@ fn particle_collision(
     while delta > 0. && n_steps < 4 {
         if let Some(hit) = spatial_query.cast_ray(
             pos,
-            vel.try_normalize().unwrap_or(Vec3::Y),
+            match Direction3d::try_from(vel) {
+                Ok(dir) => dir,
+                Err(_) => Direction3d::Y,
+            },
             vel.length() * delta,
             true,
             collision_settings.filter.clone(),
