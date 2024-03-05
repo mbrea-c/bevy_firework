@@ -510,7 +510,11 @@ impl<const I: usize, P: PhaseItem> RenderCommand<P> for SetFireworkBindGroup<I> 
         _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_bind_group(I, &firework_bindgroup.bindgroup, &[uniform_index.unwrap().index()]);
+        pass.set_bind_group(
+            I,
+            &firework_bindgroup.bindgroup,
+            &[uniform_index.unwrap().index()],
+        );
         RenderCommandResult::Success
     }
 }

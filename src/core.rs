@@ -365,7 +365,7 @@ pub fn propagate_particle_spawner_modifier(
 pub fn setup_default_mesh(mut meshes: ResMut<Assets<Mesh>>) {
     meshes.insert(
         DEFAULT_MESH.clone(),
-        Rectangle::from_size(Vec2::new(1., 1.)).mesh()
+        Rectangle::from_size(Vec2::new(1., 1.)).mesh(),
     );
 }
 

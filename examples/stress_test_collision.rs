@@ -12,8 +12,9 @@ use bevy_firework::{
     plugin::ParticleSystemPlugin,
 };
 use bevy_utilitarian::prelude::*;
-use bevy_xpbd_3d::
-    plugins::{collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins};
+use bevy_xpbd_3d::plugins::{
+    collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins,
+};
 use std::f32::consts::PI;
 
 fn main() {
