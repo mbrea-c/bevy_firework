@@ -85,6 +85,8 @@ pub struct ParticleSpawnerSettings {
     /// If Some, particles will collide with the scene according to the provided parameters
     /// If None, no particle collision will occur.
     pub collision_settings: Option<ParticleCollisionSettings>,
+    /// Whether to initialize the spawner in a disabled state
+    pub starts_disabled: bool,
 }
 
 impl Default for ParticleSpawnerSettings {
@@ -108,6 +110,7 @@ impl Default for ParticleSpawnerSettings {
             collision_settings: None,
             fade_edge: 0.7,
             fade_scene: 1.,
+            starts_disabled: false,
         }
     }
 }
@@ -154,7 +157,7 @@ impl Default for ParticleSpawnerData {
 impl From<&ParticleSpawnerSettings> for ParticleSpawnerData {
     fn from(settings: &ParticleSpawnerSettings) -> Self {
         Self {
-            enabled: true,
+            enabled: !settings.starts_disabled,
             cooldown: Timer::from_seconds(1. / settings.rate, TimerMode::Repeating),
             particles: vec![],
             parent_velocity: Vec3::ZERO,
