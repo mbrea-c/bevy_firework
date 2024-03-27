@@ -116,8 +116,10 @@ impl Plugin for CustomMaterialPlugin {
             .unwrap_or(1);
 
         let render_app = app.sub_app_mut(RenderApp);
-        let firework_uniform_layout =
-            FireworkUniformBindgroupLayout::create(render_app.world.resource::<RenderDevice>());
+        let firework_uniform_layout = FireworkUniformBindgroupLayout::create(
+            render_app.world.resource::<RenderDevice>(),
+            msaa_samples,
+        );
         let dummy_texture = render_app
             .world
             .resource::<RenderDevice>()
@@ -273,7 +275,7 @@ pub struct FireworkUniformBindgroupLayout {
 }
 
 impl FireworkUniformBindgroupLayout {
-    pub fn create(render_device: &RenderDevice) -> Self {
+    pub fn create(render_device: &RenderDevice, msaa_samples: u32) -> Self {
         let layout = render_device.create_bind_group_layout(
             Some("Firework Uniform Layout"),
             &[
@@ -294,7 +296,7 @@ impl FireworkUniformBindgroupLayout {
                     ty: BindingType::Texture {
                         sample_type: TextureSampleType::Depth,
                         view_dimension: TextureViewDimension::D2,
-                        multisampled: true,
+                        multisampled: msaa_samples > 1,
                     },
                     count: None,
                 },
