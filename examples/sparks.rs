@@ -9,8 +9,16 @@ use std::f32::consts::PI;
 
 fn main() {
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins)
-        .add_plugins(ParticleSystemPlugin)
+    app.add_plugins(DefaultPlugins);
+
+    // For now,Msaa must be disabled on the web due to this:
+    // https://github.com/gfx-rs/wgpu/issues/5263
+    #[cfg(target_arch = "wasm32")]
+    app.insert_resource(Msaa::Off);
+
+    // The particle system plugin must be added **after** any changes
+    // to the MSAA setting.
+    app.add_plugins(ParticleSystemPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, adjust_time_scale);
 
