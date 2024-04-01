@@ -13,10 +13,18 @@ use bevy_xpbd_3d::plugins::PhysicsPlugins;
 use std::f32::consts::PI;
 
 fn main() {
-    App::new()
-        .add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
-        .add_plugins(PhysicsPlugins::default())
-        .add_plugins(ParticleSystemPlugin)
+    let mut app = App::new();
+    app.add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
+        .add_plugins(PhysicsPlugins::default());
+
+    // For now,Msaa must be disabled on the web due to this:
+    // https://github.com/gfx-rs/wgpu/issues/5263
+    #[cfg(target_arch = "wasm32")]
+    app.insert_resource(Msaa::Off);
+
+    // The particle system plugin must be added **after** any changes
+    // to the MSAA setting.
+    app.add_plugins(ParticleSystemPlugin)
         .init_resource::<DebugInfo>()
         .add_systems(Startup, setup)
         .add_systems(
