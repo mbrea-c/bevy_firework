@@ -19,6 +19,7 @@
     MESH_FLAGS_TRANSMITTED_SHADOW_RECEIVER_BIT
 };
 #import bevy_pbr::pbr_functions as fns
+#import bevy_pbr::pbr_bindings,
 
 struct Vertex {
     @location(3) i_pos_scale: vec4<f32>,
@@ -50,6 +51,7 @@ struct VertexOutput {
     @location(1) world_normal: vec3<f32>,
     @location(2) color: vec4<f32>,
     @location(3) uv: vec2<f32>,
+    @location(4) world_tangent: vec3<f32>,
 };
 
 fn extract_rot(bigmat: mat4x4<f32>) -> mat3x3<f32> {
@@ -82,6 +84,7 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     out.position = position_world_to_clip(position_world);
     out.color = vertex.i_color;
     out.world_normal = direction_view_to_world(vec3(0., 0., 1.));
+    out.world_tangent = direction_view_to_world(vec3(1., 0., 0.));
     out.uv = uvs[vertex.index];
 
     return out;
@@ -114,7 +117,7 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> @locatio
     if firework_uniform.pbr == 0u {
         return color;
     } else {
-        return pbr_stuff(color, in.position, in.world_position, in.world_normal, in.uv, is_front);
+        return pbr_stuff(color, in.position, in.world_position, in.world_normal, in.uv, in.world_tangent, is_front);
     }
 }
 
@@ -124,19 +127,15 @@ fn pbr_stuff(
     world_position: vec4<f32>,
     world_normal: vec3<f32>,
     uv: vec2<f32>,
+    world_tangent: vec3<f32>,
     is_front: bool,
 ) -> vec4<f32> {
     var pbr_input = pbr_input_new();
-    //if alpha_mode == 0u {
     pbr_input.material.flags = 
         (STANDARD_MATERIAL_FLAGS_ALPHA_MODE_BLEND 
         | STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT
         | STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT);
-        //& ~STANDARD_MATERIAL_FLAGS_UNLIT_BIT;
-    // } else if alpha_mode == 1u {
-    //     pbr_input.material.flags = STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MULTIPLY;
-    // }
-    pbr_input.is_orthographic = view.projection[3].w == 1.0;
+    pbr_input.is_orthographic = view.clip_from_view[3].w == 1.0;
     pbr_input.material.base_color = base_color;
     pbr_input.material.metallic = 0.0;
     pbr_input.material.perceptual_roughness = 1.0;
@@ -146,29 +145,15 @@ fn pbr_stuff(
 
     let double_sided = (pbr_input.material.flags & STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT) != 0u;
 
-    pbr_input.world_normal = fns::prepare_world_normal(
+    pbr_input.world_normal = normalize(fns::prepare_world_normal(
         world_normal,
         double_sided,
         is_front,
-    );
+    ));
 
-    pbr_input.N = fns::apply_normal_mapping(
-        pbr_input.material.flags,
-        world_normal,
-        double_sided,
-        is_front,
-#ifdef VERTEX_TANGENTS
-#ifdef STANDARDMATERIAL_NORMAL_MAP
-    // TODO: Sort out the tangents stuff
-        vec3(0.,0.,1.),
-#endif
-#endif
-#ifdef VERTEX_UVS
-        uv,
-#endif
-        view.mip_bias,
-    );
-    pbr_input.V = fns::calculate_view(world_position, pbr_input.is_orthographic);
+    pbr_input.N = pbr_input.world_normal;
+
+    pbr_input.V = fns::calculate_view(pbr_input.world_position, pbr_input.is_orthographic);
 
     var out: vec4<f32>;
 

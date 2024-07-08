@@ -102,7 +102,7 @@ impl Default for ParticleSpawnerSettings {
             initial_scale: RandF32::constant(1.),
             scale_curve: ParamCurve::linear_uniform(vec![1., 1.]),
             acceleration: Vec3::new(0., -9.81, 0.),
-            color: Gradient::constant(Color::WHITE.into()),
+            color: Gradient::constant(LinearRgba::WHITE),
             blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
@@ -193,7 +193,7 @@ pub struct ParticleData {
     pub scale: f32,
     pub age: f32,
     pub lifetime: f32,
-    pub color: Color,
+    pub color: LinearRgba,
     pub pbr: bool,
 }
 
@@ -283,7 +283,7 @@ pub fn spawn_particles(
                     scale: initial_scale,
                     velocity,
                     age: 0.,
-                    color: *settings.color.get(0.),
+                    color: settings.color.get(0.),
                     pbr: settings.pbr,
                 })
             }
@@ -342,7 +342,7 @@ pub fn update_particles(
                     particle.velocity += (settings.acceleration
                         - particle.velocity * settings.linear_drag)
                         * time.delta_seconds();
-                    particle.color = *settings.color.get(age_percent);
+                    particle.color = settings.color.get(age_percent);
 
                     Some(particle)
                 })
@@ -367,8 +367,8 @@ pub fn propagate_particle_spawner_modifier(
 
 pub fn setup_default_mesh(mut meshes: ResMut<Assets<Mesh>>) {
     meshes.insert(
-        DEFAULT_MESH.clone(),
-        Rectangle::from_size(Vec2::new(1., 1.)).mesh(),
+        &mut DEFAULT_MESH.clone(),
+        Rectangle::from_size(Vec2::new(1., 1.)).mesh().into(),
     );
 }
 
@@ -424,9 +424,9 @@ fn particle_collision(
     while delta > 0. && n_steps < 4 {
         if let Some(hit) = spatial_query.cast_ray(
             pos,
-            match Direction3d::try_from(vel) {
+            match Dir3::try_from(vel) {
                 Ok(dir) => dir,
-                Err(_) => Direction3d::Y,
+                Err(_) => Dir3::Y,
             },
             vel.length() * delta,
             true,

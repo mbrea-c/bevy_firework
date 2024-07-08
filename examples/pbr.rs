@@ -22,7 +22,7 @@ fn main() {
     // to the MSAA setting.
     app.add_plugins(ParticleSystemPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, adjust_time_scale);
+        .add_systems(Update, (adjust_time_scale, rotate_point_light));
     #[cfg(feature = "physics_xpbd")]
     app.add_plugins(bevy_xpbd_3d::prelude::PhysicsPlugins::default());
 
@@ -74,9 +74,9 @@ fn setup(
                 initial_scale: RandF32 { min: 0.5, max: 1.3 },
                 scale_curve: ParamCurve::linear_uniform(vec![1., 2.]),
                 color: Gradient::linear(vec![
-                    (0., Color::rgba(0.6, 0.3, 0., 0.).into()),
-                    (0.1, Color::rgba(0.6, 0.3, 0., 0.5).into()),
-                    (1., Color::rgba(0.6, 0.3, 0., 0.0).into()),
+                    (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
+                    (0.1, LinearRgba::new(0.6, 0.3, 0., 0.5)),
+                    (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
                 ]),
                 blend_mode: BlendMode::Blend,
                 linear_drag: 0.7,
@@ -90,7 +90,7 @@ fn setup(
     // cube
     commands.spawn(PbrBundle {
         mesh: meshes.add(Cuboid::from_size(Vec3::ONE)),
-        material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
+        material: materials.add(Color::LinearRgba(LinearRgba::rgb(0.8, 0.7, 0.6))),
         transform: Transform::from_xyz(1.0, 1.5, 0.0),
         ..default()
     });
@@ -119,6 +119,16 @@ fn setup(
         BloomSettings::default(),
         DepthPrepass::default(),
     ));
+}
+
+fn rotate_point_light(mut point_lights: Query<&mut Transform, With<PointLight>>, time: Res<Time>) {
+    for mut transform in &mut point_lights {
+        transform.translation = Vec3::new(
+            4. * time.elapsed_seconds().sin(),
+            8. * ((time.elapsed_seconds() * 0.78932).sin() + 1.) / 2.,
+            4. * time.elapsed_seconds().cos(),
+        );
+    }
 }
 
 fn adjust_time_scale(
