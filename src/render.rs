@@ -194,6 +194,7 @@ fn queue_custom(
             continue;
         };
         let mut view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
+
         match maybe_shadow_filtering_method.unwrap_or(&ShadowFilteringMethod::default()) {
             ShadowFilteringMethod::Hardware2x2 => {
                 view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_HARDWARE_2X2;
@@ -205,6 +206,7 @@ fn queue_custom(
                 view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_TEMPORAL;
             }
         }
+
         let rangefinder = view.rangefinder3d();
         for (entity, particle_material_data) in &particle_materials {
             let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {

@@ -125,7 +125,7 @@ fn rotate_point_light(mut point_lights: Query<&mut Transform, With<PointLight>>,
     for mut transform in &mut point_lights {
         transform.translation = Vec3::new(
             4. * time.elapsed_seconds().sin(),
-            8. * (time.elapsed_seconds() * 0.78932).sin(),
+            8. * ((time.elapsed_seconds() * 0.78932).sin() + 1.) / 2.,
             4. * time.elapsed_seconds().cos(),
         );
     }

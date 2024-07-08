@@ -141,11 +141,11 @@ fn setup(
                 scale_curve: ParamCurve::constant(1.),
                 linear_drag: 0.15,
                 color: Gradient::linear(vec![
-                    (0., Color::rgba(10., 7., 1., 1.).into()),
-                    (0.7, Color::rgba(3., 1., 1., 1.).into()),
-                    (0.8, Color::rgba(1., 0.3, 0.3, 1.).into()),
-                    (0.9, Color::rgba(0.3, 0.3, 0.3, 1.).into()),
-                    (1., Color::rgba(0.1, 0.1, 0.1, 0.).into()),
+                    (0., LinearRgba::new(100., 70., 10., 1.)),
+                    (0.7, LinearRgba::new(3., 1., 1., 1.)),
+                    (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
+                    (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
+                    (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
                 ]),
                 blend_mode: BlendMode::Blend,
                 pbr: true,
@@ -167,7 +167,7 @@ fn setup(
     commands
         .spawn(PbrBundle {
             mesh: meshes.add(Cuboid::from_size(Vec3::ONE)),
-            material: materials.add(Color::rgb(0.8, 0.7, 0.6)),
+            material: materials.add(Color::from(LinearRgba::new(0.8, 0.7, 0.6, 1.))),
             transform: Transform {
                 translation: Vec3::new(0., 0.5, 0.),
                 rotation: Quat::from_rotation_x(PI / 4.) * Quat::from_rotation_y(PI / 4.),
