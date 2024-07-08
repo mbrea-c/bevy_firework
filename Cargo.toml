@@ -10,12 +10,12 @@ keywords = ["bevy", "gamedev", "particles", "graphics"]
 resolver = "2"
 
 [dependencies]
-bevy = "0.13"
+bevy = "0.14"
 bytemuck = "1.14.3"
 rand = "0.8.5"
-bevy_utilitarian = "0.4"
-bevy_xpbd_3d = { version = "0.4", features = ["serialize"], optional = true }
-serde = { version = "1.0.197", features = ["derive"] }
+bevy_utilitarian = { version = "0.5", path = "../bevy_utilitarian" }
+bevy_xpbd_3d = { version = "0.5", features = ["serialize"], optional = true }
+serde = { version = "1.0", features = ["derive"] }
 
 [features]
 default = ["physics_xpbd"]

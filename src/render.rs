@@ -12,7 +12,10 @@ use bevy::{
         query::QueryItem,
         system::{lifetimeless::*, SystemParamItem},
     },
-    pbr::{MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshViewBindGroup},
+    pbr::{
+        MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshViewBindGroup,
+        ShadowFilteringMethod,
+    },
     prelude::*,
     render::{
         extract_component::{
@@ -20,10 +23,9 @@ use bevy::{
             UniformComponentPlugin,
         },
         primitives::Aabb,
-        render_asset::RenderAssets,
         render_phase::{
-            AddRenderCommand, DrawFunctions, PhaseItem, RenderCommand, RenderCommandResult,
-            RenderPhase, SetItemPipeline, TrackedRenderPass,
+            AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
+            RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
         },
         render_resource::*,
         renderer::RenderDevice,
@@ -47,7 +49,7 @@ impl From<&ParticleData> for ParticleInstance {
         Self {
             position: value.position,
             scale: value.scale,
-            color: value.color.as_linear_rgba_f32(),
+            color: value.color.to_f32_array(),
         }
     }
 }
@@ -110,18 +112,18 @@ impl Plugin for CustomMaterialPlugin {
 
     fn finish(&self, app: &mut App) {
         let msaa_samples = app
-            .world
+            .world()
             .get_resource::<Msaa>()
             .map(|msaa| msaa.samples())
             .unwrap_or(1);
 
         let render_app = app.sub_app_mut(RenderApp);
         let firework_uniform_layout = FireworkUniformBindgroupLayout::create(
-            render_app.world.resource::<RenderDevice>(),
+            render_app.world().resource::<RenderDevice>(),
             msaa_samples,
         );
         let dummy_texture = render_app
-            .world
+            .world()
             .resource::<RenderDevice>()
             .create_texture(&TextureDescriptor {
                 label: Some("Dummy Depth Texture"),
@@ -162,12 +164,13 @@ fn queue_custom(
     msaa: Res<Msaa>,
     mut pipelines: ResMut<SpecializedRenderPipelines<FireworkPipeline>>,
     pipeline_cache: Res<PipelineCache>,
-    meshes: Res<RenderAssets<Mesh>>,
     render_mesh_instances: Res<RenderMeshInstances>,
-    material_meshes: Query<(Entity, &ParticleMaterialData)>,
+    particle_materials: Query<(Entity, &ParticleMaterialData)>,
+    mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut views: Query<(
+        Entity,
         &ExtractedView,
-        &mut RenderPhase<Transparent3d>,
+        Option<&ShadowFilteringMethod>,
         (
             Has<NormalPrepass>,
             Has<DepthPrepass>,
@@ -181,22 +184,35 @@ fn queue_custom(
     let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
 
     for (
+        view_entity,
         view,
-        mut transparent_phase,
+        maybe_shadow_filtering_method,
         (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
     ) in &mut views
     {
-        let view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
+        let Some(transparent_phase) = transparent_render_phases.get_mut(&view_entity) else {
+            continue;
+        };
+        let mut view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
+        match maybe_shadow_filtering_method.unwrap_or(&ShadowFilteringMethod::default()) {
+            ShadowFilteringMethod::Hardware2x2 => {
+                view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_HARDWARE_2X2;
+            }
+            ShadowFilteringMethod::Gaussian => {
+                view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
+            }
+            ShadowFilteringMethod::Temporal => {
+                view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_TEMPORAL;
+            }
+        }
         let rangefinder = view.rangefinder3d();
-        for (entity, particle_material_data) in &material_meshes {
-            let Some(mesh_instance) = render_mesh_instances.get(&entity) else {
+        for (entity, particle_material_data) in &particle_materials {
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
                 continue;
             };
-            let Some(mesh) = meshes.get(mesh_instance.mesh_asset_id) else {
-                continue;
-            };
-            let mut key =
-                view_key | MeshPipelineKey::from_primitive_topology(mesh.primitive_topology);
+            let mut key = view_key
+                | MeshPipelineKey::from_primitive_topology(PrimitiveTopology::TriangleList);
+            //key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
             match particle_material_data.alpha_mode {
                 AlphaMode::Blend => {
                     key |= MeshPipelineKey::BLEND_ALPHA;
@@ -236,10 +252,9 @@ fn queue_custom(
                 entity,
                 pipeline,
                 draw_function: draw_custom,
-                distance: rangefinder
-                    .distance_translation(&mesh_instance.transforms.transform.translation),
+                distance: rangefinder.distance_translation(&mesh_instance.translation),
                 batch_range: 0..1,
-                dynamic_offset: None,
+                extra_index: PhaseItemExtraIndex::NONE,
             });
         }
     }
@@ -420,6 +435,16 @@ impl SpecializedRenderPipeline for FireworkPipeline {
 
         let mut shader_defs = vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()];
 
+        let shadow_filter_method =
+            key.intersection(MeshPipelineKey::SHADOW_FILTER_METHOD_RESERVED_BITS);
+        if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_HARDWARE_2X2 {
+            shader_defs.push("SHADOW_FILTER_METHOD_HARDWARE_2X2".into());
+        } else if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN {
+            shader_defs.push("SHADOW_FILTER_METHOD_GAUSSIAN".into());
+        } else if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_TEMPORAL {
+            shader_defs.push("SHADOW_FILTER_METHOD_TEMPORAL".into());
+        }
+
         if key.msaa_samples() > 1 {
             shader_defs.push("MULTISAMPLED".into());
         }
@@ -427,7 +452,6 @@ impl SpecializedRenderPipeline for FireworkPipeline {
             shader_defs.push("DEPTH_PREPASS".into());
         }
 
-        // Ok(descriptor)
         RenderPipelineDescriptor {
             label: Some("Firework Pipeline".into()),
             layout,
@@ -452,11 +476,6 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                             format: VertexFormat::Float32x4,
                             offset: VertexFormat::Float32x4.size(),
                             shader_location: 4,
-                        },
-                        VertexAttribute {
-                            format: VertexFormat::Uint32,
-                            offset: VertexFormat::Float32x4.size() * 2,
-                            shader_location: 5,
                         },
                     ],
                 }],
@@ -536,9 +555,12 @@ impl<P: PhaseItem> RenderCommand<P> for DrawFirework {
         _: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        pass.set_vertex_buffer(0, instance_buffer.unwrap().buffer.slice(..));
+        let buffer_slice = instance_buffer.unwrap().buffer.slice(..);
+        let buffer_length = instance_buffer.unwrap().length as u32;
 
-        pass.draw(0..6, 0..instance_buffer.unwrap().length as u32);
+        pass.set_vertex_buffer(0, buffer_slice);
+        pass.draw(0..6, 0..buffer_length);
+
         RenderCommandResult::Success
     }
 }
