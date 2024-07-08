@@ -102,7 +102,7 @@ impl Default for ParticleSpawnerSettings {
             initial_scale: RandF32::constant(1.),
             scale_curve: ParamCurve::linear_uniform(vec![1., 1.]),
             acceleration: Vec3::new(0., -9.81, 0.),
-            color: Gradient::constant(LinearRgba::WHITE.into()),
+            color: Gradient::constant(LinearRgba::WHITE),
             blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
