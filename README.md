@@ -21,7 +21,7 @@ physics data for particle collision, simplified particle system animation).
 - _Billboarded_ particles.
 - Configurable integration with Bevy's PBR rendering (i.e. particles can receive
   shadows, are affected by fog and lighting changes).
-- Particle collision with arbitrary `bevy_xpbd` colliders.
+- Particle collision with arbitrary `avian` colliders.
 - WASM and WebGL compatible.
 - Soft particle edges.
 - Animated properties: certain parameters can be defined as a custom curve to
@@ -52,3 +52,4 @@ physics data for particle collision, simplified particle system animation).
 | 0.2             | 0.12   | 0.3                |
 | 0.3             | 0.13   | 0.4                |
 | 0.4             | 0.14   | 0.5                |
+| 0.5             | 0.14   | 0.5                |
