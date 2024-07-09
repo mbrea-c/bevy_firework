@@ -1,3 +1,4 @@
+use avian3d::prelude::*;
 use bevy::{core_pipeline::bloom::BloomSettings, prelude::*};
 use bevy_firework::{
     core::{BlendMode, ParticleCollisionSettings, ParticleSpawnerBundle, ParticleSpawnerSettings},
@@ -5,7 +6,6 @@ use bevy_firework::{
     plugin::ParticleSystemPlugin,
 };
 use bevy_utilitarian::prelude::*;
-use bevy_xpbd_3d::prelude::*;
 use std::f32::consts::PI;
 
 fn main() {

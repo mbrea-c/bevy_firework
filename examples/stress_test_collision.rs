@@ -1,3 +1,4 @@
+use avian3d::{collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins};
 use bevy::{
     core_pipeline::bloom::BloomSettings,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
@@ -12,9 +13,6 @@ use bevy_firework::{
     plugin::ParticleSystemPlugin,
 };
 use bevy_utilitarian::prelude::*;
-use bevy_xpbd_3d::plugins::{
-    collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins,
-};
 use std::f32::consts::PI;
 
 fn main() {

@@ -23,8 +23,8 @@ fn main() {
     app.add_plugins(ParticleSystemPlugin)
         .add_systems(Startup, setup)
         .add_systems(Update, (adjust_time_scale, rotate_point_light));
-    #[cfg(feature = "physics_xpbd")]
-    app.add_plugins(bevy_xpbd_3d::prelude::PhysicsPlugins::default());
+    #[cfg(feature = "physics_avian")]
+    app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
     app.run();
 }
@@ -63,10 +63,10 @@ fn setup(
         .spawn(ParticleSpawnerBundle::from_settings(
             ParticleSpawnerSettings {
                 one_shot: false,
-                rate: 80.0,
+                rate: 150.0,
                 emission_shape: EmissionShape::Circle {
                     normal: Vec3::Y,
-                    radius: 2.0,
+                    radius: 3.5,
                 },
                 lifetime: RandF32::constant(5.),
                 inherit_parent_velocity: true,
@@ -75,7 +75,7 @@ fn setup(
                 scale_curve: ParamCurve::linear_uniform(vec![1., 2.]),
                 color: Gradient::linear(vec![
                     (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
-                    (0.1, LinearRgba::new(0.6, 0.3, 0., 0.5)),
+                    (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
                     (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
                 ]),
                 blend_mode: BlendMode::Blend,

@@ -22,8 +22,8 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(Update, adjust_time_scale);
 
-    #[cfg(feature = "physics_xpbd")]
-    app.add_plugins(bevy_xpbd_3d::prelude::PhysicsPlugins::default());
+    #[cfg(feature = "physics_avian")]
+    app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
     app.run();
 }

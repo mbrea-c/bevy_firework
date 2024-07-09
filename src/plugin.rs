@@ -9,7 +9,7 @@ use super::{
 };
 use bevy::{asset::load_internal_asset, prelude::*, transform::TransformSystem};
 
-#[cfg(feature = "physics_xpbd")]
+#[cfg(feature = "physics_avian")]
 use super::core::sync_parent_velocity;
 
 pub const PARTICLE_SHADER_HANDLE: Handle<Shader> =
@@ -37,7 +37,7 @@ impl Plugin for ParticleSystemPlugin {
                     (create_spawner_data, propagate_particle_spawner_modifier),
                     apply_deferred,
                     sync_spawner_data,
-                    #[cfg(feature = "physics_xpbd")]
+                    #[cfg(feature = "physics_avian")]
                     sync_parent_velocity,
                 )
                     .chain(),
