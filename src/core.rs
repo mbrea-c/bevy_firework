@@ -4,8 +4,8 @@ use bevy_utilitarian::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[cfg(feature = "physics_xpbd")]
-use bevy_xpbd_3d::prelude::*;
+#[cfg(feature = "physics_avian")]
+use avian3d::prelude::*;
 
 pub const DEFAULT_MESH: Handle<Mesh> =
     Handle::weak_from_u128(164408926256276437310893021157813788765);
@@ -81,7 +81,7 @@ pub struct ParticleSpawnerSettings {
     pub blend_mode: BlendMode,
     /// Whether to use the PBR pipeline for the particle
     pub pbr: bool,
-    #[cfg(feature = "physics_xpbd")]
+    #[cfg(feature = "physics_avian")]
     /// If Some, particles will collide with the scene according to the provided parameters
     /// If None, no particle collision will occur.
     pub collision_settings: Option<ParticleCollisionSettings>,
@@ -106,7 +106,7 @@ impl Default for ParticleSpawnerSettings {
             blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
-            #[cfg(feature = "physics_xpbd")]
+            #[cfg(feature = "physics_avian")]
             collision_settings: None,
             fade_edge: 0.7,
             fade_scene: 1.,
@@ -115,7 +115,7 @@ impl Default for ParticleSpawnerSettings {
     }
 }
 
-#[cfg(feature = "physics_xpbd")]
+#[cfg(feature = "physics_avian")]
 #[derive(Reflect, Clone, Serialize, Deserialize)]
 pub struct ParticleCollisionSettings {
     pub restitution: f32,
@@ -124,7 +124,7 @@ pub struct ParticleCollisionSettings {
     pub filter: SpatialQueryFilter,
 }
 
-#[cfg(feature = "physics_xpbd")]
+#[cfg(feature = "physics_avian")]
 impl std::fmt::Debug for ParticleCollisionSettings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
@@ -294,7 +294,7 @@ pub fn spawn_particles(
 pub fn update_particles(
     mut particle_systems_query: Query<(&ParticleSpawnerSettings, &mut ParticleSpawnerData)>,
     time: Res<Time>,
-    #[cfg(feature = "physics_xpbd")] spatial_query: SpatialQuery,
+    #[cfg(feature = "physics_avian")] spatial_query: SpatialQuery,
 ) {
     particle_systems_query
         .par_iter_mut()
@@ -315,7 +315,7 @@ pub fn update_particles(
 
                     particle.scale = particle.initial_scale * scale_factor;
 
-                    #[cfg(feature = "physics_xpbd")]
+                    #[cfg(feature = "physics_avian")]
                     let (new_pos, new_vel) =
                         if let Some(collision_settigs) = &settings.collision_settings {
                             particle_collision(
@@ -331,7 +331,7 @@ pub fn update_particles(
                                 particle.velocity,
                             )
                         };
-                    #[cfg(not(feature = "physics_xpbd"))]
+                    #[cfg(not(feature = "physics_avian"))]
                     let (new_pos, new_vel) = (
                         particle.position + particle.velocity * time.delta_seconds(),
                         particle.velocity,
@@ -372,7 +372,7 @@ pub fn setup_default_mesh(mut meshes: ResMut<Assets<Mesh>>) {
     );
 }
 
-#[cfg(feature = "physics_xpbd")]
+#[cfg(feature = "physics_avian")]
 pub fn sync_parent_velocity(
     velocity: Query<(
         Entity,
@@ -405,13 +405,13 @@ pub fn sync_parent_velocity(
     }
 }
 
-#[cfg(feature = "physics_xpbd")]
+#[cfg(feature = "physics_avian")]
 /// All quantities are in world-space
 fn linear_velocity_at_point(linvel: Vec3, angvel: Vec3, point: Vec3, center_of_mass: Vec3) -> Vec3 {
     linvel + angvel.cross(point - center_of_mass)
 }
 
-#[cfg(feature = "physics_xpbd")]
+#[cfg(feature = "physics_avian")]
 fn particle_collision(
     mut pos: Vec3,
     mut vel: Vec3,

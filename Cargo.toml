@@ -14,21 +14,21 @@ bevy = "0.14"
 bytemuck = "1.14.3"
 rand = "0.8.5"
 bevy_utilitarian = { version = "0.5" }
-bevy_xpbd_3d = { version = "0.5", features = ["serialize"], optional = true }
+avian3d = { version = "0.1", features = ["serialize"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 
 [features]
-default = ["physics_xpbd"]
-physics_xpbd = ["dep:bevy_xpbd_3d"]
+default = ["physics_avian"]
+physics_avian = ["dep:avian3d"]
 
 [[example]]
 name = "collision"
-required-features = ["physics_xpbd"]
+required-features = ["physics_avian"]
 
 [[example]]
 name = "stress_test"
-required-features = ["physics_xpbd"]
+required-features = ["physics_avian"]
 
 [[example]]
 name = "stress_test_collision"
-required-features = ["physics_xpbd"]
+required-features = ["physics_avian"]
