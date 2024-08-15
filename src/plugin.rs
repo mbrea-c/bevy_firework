@@ -20,7 +20,7 @@ pub const PARTICLE_SHADER_HANDLE: Handle<Shader> =
     Handle::weak_from_u128(272481238906797053434642785120685433641);
 
 pub struct ParticleSystemPlugin {
-    update_schedule: Interned<dyn ScheduleLabel>,
+    pub update_schedule: Interned<dyn ScheduleLabel>,
 }
 
 impl Default for ParticleSystemPlugin {
