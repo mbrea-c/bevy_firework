@@ -27,7 +27,7 @@ fn main() {
 
     // The particle system plugin must be added **after** any changes
     // to the MSAA setting.
-    app.add_plugins(ParticleSystemPlugin)
+    app.add_plugins(ParticleSystemPlugin::default())
         .init_resource::<DebugInfo>()
         .add_systems(Startup, setup)
         .add_systems(
