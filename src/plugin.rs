@@ -7,7 +7,11 @@ use super::{
     },
     render,
 };
-use bevy::{asset::load_internal_asset, prelude::*, transform::TransformSystem};
+use bevy::{
+    asset::load_internal_asset,
+    ecs::{intern::Interned, schedule::ScheduleLabel},
+    prelude::*,
+};
 
 #[cfg(feature = "physics_avian")]
 use super::core::sync_parent_velocity;
@@ -15,7 +19,17 @@ use super::core::sync_parent_velocity;
 pub const PARTICLE_SHADER_HANDLE: Handle<Shader> =
     Handle::weak_from_u128(272481238906797053434642785120685433641);
 
-pub struct ParticleSystemPlugin;
+pub struct ParticleSystemPlugin {
+    update_schedule: Interned<dyn ScheduleLabel>,
+}
+
+impl Default for ParticleSystemPlugin {
+    fn default() -> Self {
+        Self {
+            update_schedule: Update.intern(),
+        }
+    }
+}
 
 impl Plugin for ParticleSystemPlugin {
     fn build(&self, app: &mut App) {
@@ -31,7 +45,7 @@ impl Plugin for ParticleSystemPlugin {
             .add_plugins(render::CustomMaterialPlugin)
             .add_systems(Startup, setup_default_mesh)
             .add_systems(
-                Update,
+                self.update_schedule,
                 (
                     apply_deferred,
                     (create_spawner_data, propagate_particle_spawner_modifier),
@@ -39,14 +53,10 @@ impl Plugin for ParticleSystemPlugin {
                     sync_spawner_data,
                     #[cfg(feature = "physics_avian")]
                     sync_parent_velocity,
+                    spawn_particles,
+                    update_particles,
                 )
                     .chain(),
-            )
-            .add_systems(
-                PostUpdate,
-                (spawn_particles, update_particles)
-                    .chain()
-                    .after(TransformSystem::TransformPropagate),
             );
     }
 }
