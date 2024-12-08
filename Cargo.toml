@@ -10,12 +10,18 @@ keywords = ["bevy", "gamedev", "particles", "graphics"]
 resolver = "2"
 
 [dependencies]
-bevy = "0.14"
+bevy = "0.15"
 bytemuck = "1.14.3"
 rand = "0.8.5"
-bevy_utilitarian = { version = "0.5" }
-avian3d = { version = "0.1", features = ["serialize"], optional = true }
+bevy_utilitarian = { git = "https://github.com/mbrea-c/bevy_utilitarian.git", branch = "update_bevy_015" }
 serde = { version = "1.0", features = ["derive"] }
+
+[dependencies.avian3d]
+# version = "0.1"
+git = "https://github.com/Jondolf/avian.git"
+rev = "52cbcecce0fd05a65005ab6935ebeb231373c2c6"
+features = ["serialize"]
+optional = true
 
 [features]
 default = ["physics_avian"]

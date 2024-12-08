@@ -167,9 +167,10 @@ impl From<&ParticleSpawnerSettings> for ParticleSpawnerData {
 
 #[derive(Bundle)]
 pub struct ParticleSpawnerBundle {
-    spatial: SpatialBundle,
+    visibility: Visibility,
+    transform: Transform,
     settings: ParticleSpawnerSettings,
-    mesh: Handle<Mesh>,
+    mesh: Mesh3d,
     name: Name,
 }
 
@@ -177,8 +178,9 @@ impl ParticleSpawnerBundle {
     pub fn from_settings(settings: ParticleSpawnerSettings) -> Self {
         Self {
             settings,
-            spatial: SpatialBundle::default(),
-            mesh: DEFAULT_MESH.clone(),
+            transform: default(),
+            visibility: default(),
+            mesh: Mesh3d(DEFAULT_MESH.clone()),
             name: Name::new("Particle System"),
         }
     }
@@ -305,7 +307,7 @@ pub fn update_particles(
                 .filter_map(|particle| {
                     let mut particle = *particle;
 
-                    particle.age += time.delta_seconds();
+                    particle.age += time.delta_secs();
                     if particle.age >= particle.lifetime {
                         return None;
                     }
@@ -321,13 +323,13 @@ pub fn update_particles(
                             particle_collision(
                                 particle.position,
                                 particle.velocity,
-                                time.delta_seconds(),
+                                time.delta_secs(),
                                 collision_settigs,
                                 &spatial_query,
                             )
                         } else {
                             (
-                                particle.position + particle.velocity * time.delta_seconds(),
+                                particle.position + particle.velocity * time.delta_secs(),
                                 particle.velocity,
                             )
                         };
@@ -341,7 +343,7 @@ pub fn update_particles(
                     particle.velocity = new_vel;
                     particle.velocity += (settings.acceleration
                         - particle.velocity * settings.linear_drag)
-                        * time.delta_seconds();
+                        * time.delta_secs();
                     particle.color = settings.color.get(age_percent);
 
                     Some(particle)
@@ -430,7 +432,7 @@ fn particle_collision(
             },
             vel.length() * delta,
             true,
-            collision_settings.filter.clone(),
+            &collision_settings.filter,
         ) {
             if hit.time_of_impact == 0. {
                 let mut normal = hit.normal;

@@ -1,4 +1,4 @@
-use bevy::{core_pipeline::bloom::BloomSettings, prelude::*};
+use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
     core::{BlendMode, ParticleSpawnerBundle, ParticleSpawnerSettings},
     emission_shape::EmissionShape,
@@ -11,13 +11,6 @@ fn main() {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins);
 
-    // For now,Msaa must be disabled on the web due to this:
-    // https://github.com/gfx-rs/wgpu/issues/5263
-    #[cfg(target_arch = "wasm32")]
-    app.insert_resource(Msaa::Off);
-
-    // The particle system plugin must be added **after** any changes
-    // to the MSAA setting.
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
         .add_systems(Update, adjust_time_scale);
@@ -35,29 +28,22 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // spawn text
-    commands.spawn(TextBundle {
-        text: Text {
-            sections: vec![TextSection {
-                value: "Press Space to toggle slow motion".to_string(),
-                style: TextStyle {
-                    font_size: 40.0,
-                    color: Color::WHITE,
-                    ..default()
-                },
-            }],
-            ..Default::default()
+    commands.spawn((
+        Text("Press Space to toggle slow motion".to_string()),
+        TextFont {
+            font_size: 40.0,
+            ..default()
         },
-        transform: Transform::from_xyz(-4.0, 4.0, 0.0),
-        ..Default::default()
-    });
+        TextColor(Color::WHITE),
+        Transform::from_xyz(-4.0, 4.0, 0.0),
+    ));
 
     // circular base
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Circle::new(4.0)),
-        material: materials.add(Color::WHITE),
-        transform: Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Circle::new(4.0))),
+        MeshMaterial3d(materials.add(Color::WHITE)),
+        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+    ));
     commands
         .spawn(ParticleSpawnerBundle::from_settings(
             ParticleSpawnerSettings {
@@ -95,26 +81,28 @@ fn setup(
         .insert(Transform::from_xyz(0., 0.1, 0.));
 
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 1500000.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
+
     // camera
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-            camera: Camera {
-                hdr: true,
-                ..default()
-            },
+        Camera3d::default(),
+        Camera {
+            hdr: true,
             ..default()
         },
-        BloomSettings::default(),
+        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Bloom::default(),
+        // For now,Msaa must be disabled on the web due to this:
+        // https://github.com/gfx-rs/wgpu/issues/5263
+        #[cfg(target_arch = "wasm32")]
+        Msaa::Off,
     ));
 }
 

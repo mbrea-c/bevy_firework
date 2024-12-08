@@ -76,46 +76,23 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // spawn text
-    // commands.spawn(TextBundle {
-    //     text: Text {
-    //         sections: vec![TextSection {
-    //             value: "Press Space to toggle slow motion".to_string(),
-    //             style: TextStyle {
-    //                 font_size: 40.0,
-    //                 color: Color::WHITE,
-    //                 ..default()
-    //             },
-    //         }],
-    //         ..Default::default()
-    //     },
-    //     transform: Transform::from_xyz(-4.0, 4.0, 0.0),
-    //     ..Default::default()
-    // });
-
-    // Text with multiple sections
     commands.spawn((
-        // Create a TextBundle that has a Text with a list of sections.
-        TextBundle::from_sections([TextSection::new(
-            "FPS: ",
-            TextStyle {
-                // This font is loaded and will be used instead of the default font.
-                font_size: 20.0,
-                ..default()
-            },
-        )]),
+        Text("FPS: ".to_string()),
+        TextFont {
+            font_size: 20.0,
+            ..default()
+        },
         DebugInfoText,
     ));
 
     // circular base
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::from_size(Vec3::new(8., 1., 8.))),
-            material: materials.add(Color::WHITE),
-            transform: Transform::from_translation(Vec3::new(0., -0.5, 0.)),
-            ..default()
-        })
-        .insert(Collider::cuboid(8., 1., 8.));
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::from_size(Vec3::new(8., 1., 8.)))),
+        MeshMaterial3d(materials.add(Color::WHITE)),
+        Transform::from_translation(Vec3::new(0., -0.5, 0.)),
+        Collider::cuboid(8., 1., 8.),
+    ));
+
     commands
         .spawn(ParticleSpawnerBundle::from_settings(
             ParticleSpawnerSettings {
@@ -162,29 +139,27 @@ fn setup(
         });
 
     // angled cube
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::from_size(Vec3::ONE)),
-            material: materials.add(Color::from(LinearRgba::new(0.8, 0.7, 0.6, 1.))),
-            transform: Transform {
-                translation: Vec3::new(0., 0.5, 0.),
-                rotation: Quat::from_rotation_x(PI / 4.) * Quat::from_rotation_y(PI / 4.),
-                ..default()
-            },
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::from_size(Vec3::ONE))),
+        MeshMaterial3d(materials.add(Color::from(LinearRgba::new(0.8, 0.7, 0.6, 1.)))),
+        Transform {
+            translation: Vec3::new(0., 0.5, 0.),
+            rotation: Quat::from_rotation_x(PI / 4.) * Quat::from_rotation_y(PI / 4.),
             ..default()
-        })
-        .insert(Collider::cuboid(1., 1., 1.));
+        },
+        Collider::cuboid(1., 1., 1.),
+    ));
 
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 1500000.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
+
     // camera
     commands.spawn((
         Camera3dBundle {

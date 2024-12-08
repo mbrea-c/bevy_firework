@@ -29,12 +29,43 @@ use bevy::{
         },
         render_resource::*,
         renderer::RenderDevice,
-        texture::BevyDefault,
+        sync_world::MainEntity,
         view::{ExtractedView, ViewTarget},
         Render, RenderApp, RenderSet,
     },
+    utils::HashMap,
 };
 use bytemuck::{Pod, Zeroable};
+
+pub struct CustomMaterialPlugin;
+
+impl Plugin for CustomMaterialPlugin {
+    fn build(&self, app: &mut App) {
+        app //
+            .add_plugins(ExtractComponentPlugin::<ParticleSpawnerData>::default())
+            .add_plugins(UniformComponentPlugin::<FireworkUniform>::default())
+            .add_systems(Last, update_aabbs);
+        app.sub_app_mut(RenderApp)
+            .add_render_command::<Transparent3d, DrawCustom>()
+            .init_resource::<SpecializedRenderPipelines<FireworkPipeline>>()
+            .add_systems(
+                Render,
+                (
+                    queue_custom.in_set(RenderSet::QueueMeshes),
+                    prepare_instance_buffers.in_set(RenderSet::PrepareResources),
+                    prepare_firework_bindgroup.in_set(RenderSet::PrepareBindGroups),
+                ),
+            );
+    }
+
+    fn finish(&self, app: &mut App) {
+        let render_app = app.sub_app_mut(RenderApp);
+
+        render_app.insert_resource(DummyDepthTextures::default());
+        render_app.insert_resource(FireworkUniformBindgroupLayouts::default());
+        render_app.insert_resource(FireworkPipelines::default());
+    }
+}
 
 #[derive(Clone, Copy, Pod, Zeroable)]
 #[repr(C)]
@@ -86,91 +117,67 @@ impl ExtractComponent for ParticleSpawnerData {
     }
 }
 
-#[derive(Resource)]
-pub struct DummyDepthTexture(pub TextureView);
+#[derive(Resource, Default)]
+pub struct DummyDepthTextures {
+    /// A dummy texture per sample count setting
+    pub textures: HashMap<u32, TextureView>,
+}
 
-pub struct CustomMaterialPlugin;
-
-impl Plugin for CustomMaterialPlugin {
-    fn build(&self, app: &mut App) {
-        app //
-            .add_plugins(ExtractComponentPlugin::<ParticleSpawnerData>::default())
-            .add_plugins(UniformComponentPlugin::<FireworkUniform>::default())
-            .add_systems(Last, update_aabbs);
-        app.sub_app_mut(RenderApp)
-            .add_render_command::<Transparent3d, DrawCustom>()
-            .init_resource::<SpecializedRenderPipelines<FireworkPipeline>>()
-            .add_systems(
-                Render,
-                (
-                    queue_custom.in_set(RenderSet::QueueMeshes),
-                    prepare_instance_buffers.in_set(RenderSet::PrepareResources),
-                    prepare_firework_bindgroup.in_set(RenderSet::PrepareBindGroups),
-                ),
-            );
-    }
-
-    fn finish(&self, app: &mut App) {
-        let msaa_samples = app
-            .world()
-            .get_resource::<Msaa>()
-            .map(|msaa| msaa.samples())
-            .unwrap_or(1);
-
-        let render_app = app.sub_app_mut(RenderApp);
-        let firework_uniform_layout = FireworkUniformBindgroupLayout::create(
-            render_app.world().resource::<RenderDevice>(),
-            msaa_samples,
-        );
-        let dummy_texture = render_app
-            .world()
-            .resource::<RenderDevice>()
-            .create_texture(&TextureDescriptor {
-                label: Some("Dummy Depth Texture"),
-                size: Extent3d {
-                    width: 1,
-                    height: 1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: msaa_samples,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Depth32Float,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::RENDER_ATTACHMENT
-                    | TextureUsages::COPY_SRC,
-                view_formats: &[],
-            })
-            .create_view(&TextureViewDescriptor {
-                label: None,
-                format: None,
-                dimension: None,
-                aspect: TextureAspect::DepthOnly,
-                base_mip_level: 0,
-                mip_level_count: Some(1),
-                base_array_layer: 0,
-                array_layer_count: Some(1),
-            });
-        render_app.insert_resource(DummyDepthTexture(dummy_texture));
-        render_app.insert_resource(firework_uniform_layout);
-        render_app.init_resource::<FireworkPipeline>();
+impl DummyDepthTextures {
+    pub fn get(&mut self, sample_count: u32, render_device: &RenderDevice) -> &TextureView {
+        if self.textures.contains_key(&sample_count) {
+            self.textures.get(&sample_count).unwrap()
+        } else {
+            let texture = render_device
+                .create_texture(&TextureDescriptor {
+                    label: Some("Dummy Depth Texture"),
+                    size: Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count,
+                    dimension: TextureDimension::D2,
+                    format: TextureFormat::Depth32Float,
+                    usage: TextureUsages::TEXTURE_BINDING
+                        | TextureUsages::RENDER_ATTACHMENT
+                        | TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                })
+                .create_view(&TextureViewDescriptor {
+                    label: None,
+                    format: None,
+                    dimension: None,
+                    aspect: TextureAspect::DepthOnly,
+                    base_mip_level: 0,
+                    mip_level_count: Some(1),
+                    base_array_layer: 0,
+                    array_layer_count: Some(1),
+                });
+            self.textures.insert(sample_count, texture.clone());
+            self.textures.get(&sample_count).unwrap()
+        }
     }
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn queue_custom(
     transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
-    custom_pipeline: Res<FireworkPipeline>,
-    msaa: Res<Msaa>,
+    mut firework_uniform_layouts: ResMut<FireworkUniformBindgroupLayouts>,
+    mut firework_pipelines: ResMut<FireworkPipelines>,
+    render_device: Res<RenderDevice>,
+    mesh_pipeline: Res<MeshPipeline>,
     mut pipelines: ResMut<SpecializedRenderPipelines<FireworkPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     render_mesh_instances: Res<RenderMeshInstances>,
-    particle_materials: Query<(Entity, &ParticleMaterialData)>,
+    particle_materials: Query<(Entity, &MainEntity, &ParticleMaterialData)>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut views: Query<(
         Entity,
         &ExtractedView,
         Option<&ShadowFilteringMethod>,
+        &Msaa,
         (
             Has<NormalPrepass>,
             Has<DepthPrepass>,
@@ -181,15 +188,23 @@ fn queue_custom(
 ) {
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
 
-    let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
-
     for (
         view_entity,
         view,
         maybe_shadow_filtering_method,
+        msaa,
         (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
     ) in &mut views
     {
+        firework_uniform_layouts.ensure_created(&render_device, msaa.samples());
+        let bindgroup_layout = firework_uniform_layouts.get(msaa.samples());
+        firework_pipelines.ensure_created(
+            msaa.samples(),
+            mesh_pipeline.clone(),
+            bindgroup_layout.clone(),
+        );
+        let custom_pipeline = firework_pipelines.get(msaa.samples());
+        let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
         let Some(transparent_phase) = transparent_render_phases.get_mut(&view_entity) else {
             continue;
         };
@@ -208,8 +223,9 @@ fn queue_custom(
         }
 
         let rangefinder = view.rangefinder3d();
-        for (entity, particle_material_data) in &particle_materials {
-            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(entity) else {
+        for (entity, main_entity, particle_material_data) in &particle_materials {
+            let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
+            else {
                 continue;
             };
             let mut key = view_key
@@ -251,7 +267,7 @@ fn queue_custom(
 
             let pipeline = pipelines.specialize(&pipeline_cache, &custom_pipeline, key);
             transparent_phase.add(Transparent3d {
-                entity,
+                entity: (entity, *main_entity),
                 pipeline,
                 draw_function: draw_custom,
                 distance: rangefinder.distance_translation(&mesh_instance.translation),
@@ -286,13 +302,13 @@ fn prepare_instance_buffers(
     }
 }
 
-#[derive(Resource)]
-pub struct FireworkUniformBindgroupLayout {
-    pub layout: BindGroupLayout,
+#[derive(Resource, Default)]
+pub struct FireworkUniformBindgroupLayouts {
+    pub layouts: HashMap<u32, BindGroupLayout>,
 }
 
-impl FireworkUniformBindgroupLayout {
-    pub fn create(render_device: &RenderDevice, msaa_samples: u32) -> Self {
+impl FireworkUniformBindgroupLayouts {
+    pub fn ensure_created(&mut self, render_device: &RenderDevice, msaa_samples: u32) {
         let layout = render_device.create_bind_group_layout(
             Some("Firework Uniform Layout"),
             &[
@@ -320,7 +336,11 @@ impl FireworkUniformBindgroupLayout {
             ],
         );
 
-        Self { layout }
+        self.layouts.insert(msaa_samples, layout);
+    }
+
+    pub fn get(&self, msaa_samples: u32) -> &BindGroupLayout {
+        self.layouts.get(&msaa_samples).unwrap()
     }
 }
 
@@ -339,14 +359,15 @@ pub struct FireworkUniform {
 
 pub fn prepare_firework_bindgroup(
     mut commands: Commands,
-    firework_uniform_bindgroup_layout: Res<FireworkUniformBindgroupLayout>,
     render_device: Res<RenderDevice>,
+    firework_uniform_layouts: Res<FireworkUniformBindgroupLayouts>,
     firework_uniforms: Res<ComponentUniforms<FireworkUniform>>,
-    dummy_depth_texture: Res<DummyDepthTexture>,
-    view_query: Query<(Entity, Option<&ViewPrepassTextures>), With<ViewTarget>>,
+    mut dummy_depth_textures: ResMut<DummyDepthTextures>,
+    view_query: Query<(Entity, &Msaa, Option<&ViewPrepassTextures>), With<ViewTarget>>,
 ) {
     if let Some(binding) = firework_uniforms.uniforms().binding() {
-        for (entity, view_prepass_textures_opt) in &view_query {
+        for (entity, msaa, view_prepass_textures_opt) in &view_query {
+            let bindgroup_layout = firework_uniform_layouts.get(msaa.samples());
             let mut entries = vec![BindGroupEntry {
                 binding: 0,
                 resource: binding.clone(),
@@ -360,13 +381,15 @@ pub fn prepare_firework_bindgroup(
                 // Push a dummy depth texture view
                 entries.push(BindGroupEntry {
                     binding: 1,
-                    resource: BindingResource::TextureView(&dummy_depth_texture.0),
+                    resource: BindingResource::TextureView(
+                        dummy_depth_textures.get(msaa.samples(), &render_device),
+                    ),
                 });
             }
             commands.entity(entity).insert(FireworkUniformBindgroup {
                 bindgroup: render_device.create_bind_group(
                     "Firework Uniform Bindgroup",
-                    &firework_uniform_bindgroup_layout.layout,
+                    bindgroup_layout,
                     &entries,
                 ),
             });
@@ -400,26 +423,47 @@ fn update_aabbs(mut query: Query<(&mut Aabb, &GlobalTransform, &ParticleSpawnerD
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
+pub struct FireworkPipelines {
+    /// One pipeline per MSAA sample count
+    /// will be initialize during "prepare" stage
+    pipelines: HashMap<u32, FireworkPipeline>,
+}
+
+impl FireworkPipelines {
+    pub fn ensure_created(
+        &mut self,
+        msaa_samples: u32,
+        mesh_pipeline: MeshPipeline,
+        uniform_layout: BindGroupLayout,
+    ) {
+        let vertex_shader = PARTICLE_SHADER_HANDLE;
+
+        self.pipelines.insert(
+            msaa_samples,
+            FireworkPipeline {
+                vertex_shader,
+                mesh_pipeline,
+                uniform_layout,
+            },
+        );
+    }
+
+    pub fn get(&self, msaa_samples: u32) -> &FireworkPipeline {
+        self.pipelines.get(&msaa_samples).unwrap()
+    }
+}
+
 pub struct FireworkPipeline {
     vertex_shader: Handle<Shader>,
     mesh_pipeline: MeshPipeline,
     uniform_layout: BindGroupLayout,
 }
 
-impl FromWorld for FireworkPipeline {
-    fn from_world(world: &mut World) -> Self {
-        let vertex_shader = PARTICLE_SHADER_HANDLE;
-        let mesh_pipeline = world.resource::<MeshPipeline>();
-
-        FireworkPipeline {
-            vertex_shader,
-            mesh_pipeline: mesh_pipeline.clone(),
-            uniform_layout: world
-                .resource::<FireworkUniformBindgroupLayout>()
-                .layout
-                .clone(),
-        }
+// Added a basic Debug impl for simpler checking of the contents of the sample->pipeline map.
+impl std::fmt::Debug for FireworkPipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "FireworkPipeline {{...}}")
     }
 }
 
@@ -509,6 +553,7 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
+            zero_initialize_workgroup_memory: true,
         }
     }
 }
