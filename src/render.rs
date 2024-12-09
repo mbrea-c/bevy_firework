@@ -102,18 +102,22 @@ impl ExtractComponent for ParticleSpawnerData {
 
     fn extract_component(item: QueryItem<'_, Self::QueryData>) -> Option<Self::Out> {
         let (data, settings) = item;
-        Some((
-            ParticleMaterialData {
-                particles: data.particles.iter().map(|p| p.into()).collect(),
-                alpha_mode: settings.blend_mode.into(),
-            },
-            FireworkUniform {
-                alpha_mode: settings.blend_mode.into(),
-                pbr: settings.pbr.into(),
-                fade_edge: settings.fade_edge,
-                fade_scene: settings.fade_scene,
-            },
-        ))
+        if data.particles.is_empty() {
+            None
+        } else {
+            Some((
+                ParticleMaterialData {
+                    particles: data.particles.iter().map(|p| p.into()).collect(),
+                    alpha_mode: settings.blend_mode.into(),
+                },
+                FireworkUniform {
+                    alpha_mode: settings.blend_mode.into(),
+                    pbr: settings.pbr.into(),
+                    fade_edge: settings.fade_edge,
+                    fade_scene: settings.fade_scene,
+                },
+            ))
+        }
     }
 }
 
