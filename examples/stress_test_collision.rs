@@ -1,6 +1,6 @@
 use avian3d::{collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins};
 use bevy::{
-    core_pipeline::bloom::BloomSettings,
+    core_pipeline::bloom::Bloom,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
@@ -20,13 +20,6 @@ fn main() {
     app.add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
         .add_plugins(PhysicsPlugins::default());
 
-    // For now,Msaa must be disabled on the web due to this:
-    // https://github.com/gfx-rs/wgpu/issues/5263
-    #[cfg(target_arch = "wasm32")]
-    app.insert_resource(Msaa::Off);
-
-    // The particle system plugin must be added **after** any changes
-    // to the MSAA setting.
     app.add_plugins(ParticleSystemPlugin::default())
         .init_resource::<DebugInfo>()
         .add_systems(Startup, setup)
@@ -162,16 +155,18 @@ fn setup(
 
     // camera
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-            camera: Camera {
-                hdr: true,
+        Camera3d::default(),
+        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera {
+            hdr: true,
 
-                ..default()
-            },
             ..default()
         },
-        BloomSettings::default(),
+        Bloom::default(),
+        // For now,Msaa must be disabled on the web due to this:
+        // https://github.com/gfx-rs/wgpu/issues/5263
+        #[cfg(target_arch = "wasm32")]
+        Msaa::Off,
     ));
 }
 
@@ -196,7 +191,7 @@ fn update_debug_info_text(
     mut debug_text_query: Query<&mut Text, With<DebugInfoText>>,
 ) {
     for mut text in &mut debug_text_query {
-        text.sections[0].value = format!("{:?}", debug_info);
+        text.0 = format!("{:?}", debug_info);
     }
 }
 
