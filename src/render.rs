@@ -1,6 +1,6 @@
 use crate::plugin::PARTICLE_SHADER_HANDLE;
 
-use super::core::{ParticleData, ParticleSpawnerData, ParticleSpawnerSettings};
+use super::core::{ParticleData, ParticleSpawner, ParticleSpawnerData};
 use bevy::{
     core_pipeline::{
         core_3d::{Transparent3d, CORE_3D_DEPTH_FORMAT},
@@ -93,10 +93,7 @@ pub struct ParticleMaterialData {
 }
 
 impl ExtractComponent for ParticleSpawnerData {
-    type QueryData = (
-        &'static ParticleSpawnerData,
-        &'static ParticleSpawnerSettings,
-    );
+    type QueryData = (&'static ParticleSpawnerData, &'static ParticleSpawner);
     type QueryFilter = ();
     type Out = (ParticleMaterialData, FireworkUniform);
 
@@ -269,7 +266,7 @@ fn queue_custom(
                 key |= MeshPipelineKey::DEFERRED_PREPASS;
             }
 
-            let pipeline = pipelines.specialize(&pipeline_cache, &custom_pipeline, key);
+            let pipeline = pipelines.specialize(&pipeline_cache, custom_pipeline, key);
             transparent_phase.add(Transparent3d {
                 entity: (entity, *main_entity),
                 pipeline,

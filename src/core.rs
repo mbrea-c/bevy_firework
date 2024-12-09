@@ -45,8 +45,15 @@ impl From<BlendMode> for u32 {
 }
 
 #[derive(Component, Reflect, Clone, Debug, Serialize, Deserialize)]
+#[require(
+    ParticleSpawnerData,
+    Visibility,
+    Transform,
+    Mesh3d,
+    NoAutomaticBatching(|| NoAutomaticBatching)
+)]
 #[reflect(Component)]
-pub struct ParticleSpawnerSettings {
+pub struct ParticleSpawner {
     /// Particles per second
     pub rate: f32,
     /// Whether to spawn `rate` particles at once and then stop
@@ -85,11 +92,11 @@ pub struct ParticleSpawnerSettings {
     /// If Some, particles will collide with the scene according to the provided parameters
     /// If None, no particle collision will occur.
     pub collision_settings: Option<ParticleCollisionSettings>,
-    /// Whether to initialize the spawner in a disabled state
-    pub starts_disabled: bool,
+    /// Whether to initialize the spawner in an enabled state
+    pub starts_enabled: bool,
 }
 
-impl Default for ParticleSpawnerSettings {
+impl Default for ParticleSpawner {
     fn default() -> Self {
         Self {
             rate: 5.,
@@ -110,7 +117,7 @@ impl Default for ParticleSpawnerSettings {
             collision_settings: None,
             fade_edge: 0.7,
             fade_scene: 1.,
-            starts_disabled: false,
+            starts_enabled: true,
         }
     }
 }
@@ -135,55 +142,13 @@ impl std::fmt::Debug for ParticleCollisionSettings {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct ParticleSpawnerData {
+    pub initialized: bool,
     pub enabled: bool,
     pub cooldown: Timer,
     pub particles: Vec<ParticleData>,
     pub parent_velocity: Vec3,
-}
-
-impl Default for ParticleSpawnerData {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            cooldown: Timer::default(),
-            particles: vec![],
-            parent_velocity: Vec3::ZERO,
-        }
-    }
-}
-
-impl From<&ParticleSpawnerSettings> for ParticleSpawnerData {
-    fn from(settings: &ParticleSpawnerSettings) -> Self {
-        Self {
-            enabled: !settings.starts_disabled,
-            cooldown: Timer::from_seconds(1. / settings.rate, TimerMode::Repeating),
-            particles: vec![],
-            parent_velocity: Vec3::ZERO,
-        }
-    }
-}
-
-#[derive(Bundle)]
-pub struct ParticleSpawnerBundle {
-    visibility: Visibility,
-    transform: Transform,
-    settings: ParticleSpawnerSettings,
-    mesh: Mesh3d,
-    name: Name,
-}
-
-impl ParticleSpawnerBundle {
-    pub fn from_settings(settings: ParticleSpawnerSettings) -> Self {
-        Self {
-            settings,
-            transform: default(),
-            visibility: default(),
-            mesh: Mesh3d(DEFAULT_MESH.clone()),
-            name: Name::new("Particle System"),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -214,35 +179,23 @@ impl Default for EffectModifier {
     }
 }
 
-pub fn create_spawner_data(
-    mut commands: Commands,
-    mut spawners: Query<(Entity, &ParticleSpawnerSettings), Without<ParticleSpawnerData>>,
-) {
-    for (entity, settings) in &mut spawners {
-        commands
-            .entity(entity)
-            .insert(ParticleSpawnerData::from(settings))
-            .insert(NoAutomaticBatching);
-    }
-}
-
 pub fn sync_spawner_data(
-    mut spawners: Query<
-        (&ParticleSpawnerSettings, &mut ParticleSpawnerData),
-        Changed<ParticleSpawnerSettings>,
-    >,
+    mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
 ) {
     for (settings, mut data) in &mut spawners {
         data.cooldown
             .set_duration(Duration::from_secs_f32(1. / settings.rate));
         data.cooldown.set_mode(TimerMode::Repeating);
+        if !data.initialized {
+            data.enabled = settings.starts_enabled;
+        }
     }
 }
 
 pub fn spawn_particles(
     mut particle_systems_query: Query<(
         &GlobalTransform,
-        &ParticleSpawnerSettings,
+        &ParticleSpawner,
         &mut ParticleSpawnerData,
         Option<&EffectModifier>,
     )>,
@@ -294,7 +247,7 @@ pub fn spawn_particles(
 }
 
 pub fn update_particles(
-    mut particle_systems_query: Query<(&ParticleSpawnerSettings, &mut ParticleSpawnerData)>,
+    mut particle_systems_query: Query<(&ParticleSpawner, &mut ParticleSpawnerData)>,
     time: Res<Time>,
     #[cfg(feature = "physics_avian")] spatial_query: SpatialQuery,
 ) {
@@ -356,7 +309,7 @@ pub fn propagate_particle_spawner_modifier(
     mut commands: Commands,
     modifiers: Query<(Entity, &EffectModifier)>,
     children_query: Query<&Children>,
-    particle_spawners: Query<&ParticleSpawnerSettings>,
+    particle_spawners: Query<&ParticleSpawner>,
 ) {
     for (entity, modifier) in &modifiers {
         for child in children_query.iter_descendants(entity) {

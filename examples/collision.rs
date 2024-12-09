@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
-    core::{BlendMode, ParticleCollisionSettings, ParticleSpawnerBundle, ParticleSpawnerSettings},
+    core::{BlendMode, ParticleCollisionSettings, ParticleSpawner},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
 };
@@ -44,50 +44,49 @@ fn setup(
         Collider::cuboid(8., 1., 8.),
     ));
 
-    commands
-        .spawn(ParticleSpawnerBundle::from_settings(
-            ParticleSpawnerSettings {
-                rate: 100.0,
-                one_shot: false,
-                emission_shape: EmissionShape::Circle {
-                    normal: Vec3::Y,
-                    radius: 0.3,
-                },
-                lifetime: RandF32::constant(6.75),
-                initial_velocity: RandVec3 {
-                    magnitude: RandF32 { min: 6., max: 8. },
-                    direction: Vec3::Y,
-                    spread: 30. / 180. * PI,
-                },
-                inherit_parent_velocity: true,
-                initial_scale: RandF32 {
-                    min: 0.02,
-                    max: 0.08,
-                },
-                scale_curve: ParamCurve::constant(1.),
-                linear_drag: 0.15,
-                color: Gradient::linear(vec![
-                    (0., LinearRgba::new(10., 7., 1., 1.)),
-                    (0.7, LinearRgba::new(3., 1., 1., 1.)),
-                    (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
-                    (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
-                    (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
-                ]),
-                blend_mode: BlendMode::Blend,
-                pbr: true,
-                collision_settings: Some(ParticleCollisionSettings {
-                    restitution: 0.6,
-                    friction: 0.2,
-                    filter: SpatialQueryFilter::default(),
-                }),
-                ..default()
+    commands.spawn((
+        ParticleSpawner {
+            rate: 100.0,
+            one_shot: false,
+            emission_shape: EmissionShape::Circle {
+                normal: Vec3::Y,
+                radius: 0.3,
             },
-        ))
-        .insert(Transform {
+            lifetime: RandF32::constant(6.75),
+            initial_velocity: RandVec3 {
+                magnitude: RandF32 { min: 6., max: 8. },
+                direction: Vec3::Y,
+                spread: 30. / 180. * PI,
+            },
+            inherit_parent_velocity: true,
+            initial_scale: RandF32 {
+                min: 0.02,
+                max: 0.08,
+            },
+            scale_curve: ParamCurve::constant(1.),
+            linear_drag: 0.15,
+            color: Gradient::linear(vec![
+                (0., LinearRgba::new(10., 7., 1., 1.)),
+                (0.7, LinearRgba::new(3., 1., 1., 1.)),
+                (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
+                (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
+                (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
+            ]),
+            blend_mode: BlendMode::Blend,
+            pbr: true,
+            collision_settings: Some(ParticleCollisionSettings {
+                restitution: 0.6,
+                friction: 0.2,
+                filter: SpatialQueryFilter::default(),
+            }),
+            ..default()
+        },
+        Transform {
             translation: Vec3::new(5., 0.5, 0.),
             rotation: Quat::from_rotation_z(PI / 4.),
             ..default()
-        });
+        },
+    ));
 
     // angled cube
     commands.spawn((

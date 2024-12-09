@@ -2,8 +2,8 @@ use crate::core::setup_default_mesh;
 
 use super::{
     core::{
-        create_spawner_data, propagate_particle_spawner_modifier, spawn_particles,
-        sync_spawner_data, update_particles, ParticleSpawnerSettings,
+        propagate_particle_spawner_modifier, spawn_particles, sync_spawner_data, update_particles,
+        ParticleSpawner,
     },
     render,
 };
@@ -41,14 +41,14 @@ impl Plugin for ParticleSystemPlugin {
         );
 
         app //
-            .register_type::<ParticleSpawnerSettings>()
+            .register_type::<ParticleSpawner>()
             .add_plugins(render::CustomMaterialPlugin)
             .add_systems(Startup, setup_default_mesh)
             .add_systems(
                 self.update_schedule,
                 (
                     apply_deferred,
-                    (create_spawner_data, propagate_particle_spawner_modifier),
+                    propagate_particle_spawner_modifier,
                     apply_deferred,
                     sync_spawner_data,
                     #[cfg(feature = "physics_avian")]

@@ -3,7 +3,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_firework::{
-    core::{BlendMode, ParticleSpawnerBundle, ParticleSpawnerSettings},
+    core::{BlendMode, ParticleSpawner},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
 };
@@ -46,34 +46,33 @@ fn setup(
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
 
-    commands
-        .spawn(ParticleSpawnerBundle::from_settings(
-            ParticleSpawnerSettings {
-                one_shot: false,
-                rate: 150.0,
-                emission_shape: EmissionShape::Circle {
-                    normal: Vec3::Y,
-                    radius: 3.5,
-                },
-                lifetime: RandF32::constant(5.),
-                inherit_parent_velocity: true,
-                initial_velocity: RandVec3::constant(Vec3::ZERO),
-                initial_scale: RandF32 { min: 0.5, max: 1.3 },
-                scale_curve: ParamCurve::linear_uniform(vec![1., 2.]),
-                color: Gradient::linear(vec![
-                    (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
-                    (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
-                    (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
-                ]),
-                blend_mode: BlendMode::Blend,
-                linear_drag: 0.7,
-                pbr: true,
-                acceleration: Vec3::new(0., 0.3, 0.),
-                fade_scene: 3.5,
-                ..default()
+    commands.spawn((
+        ParticleSpawner {
+            one_shot: false,
+            rate: 150.0,
+            emission_shape: EmissionShape::Circle {
+                normal: Vec3::Y,
+                radius: 3.5,
             },
-        ))
-        .insert(Transform::from_xyz(0., 0.1, 0.));
+            lifetime: RandF32::constant(5.),
+            inherit_parent_velocity: true,
+            initial_velocity: RandVec3::constant(Vec3::ZERO),
+            initial_scale: RandF32 { min: 0.5, max: 1.3 },
+            scale_curve: ParamCurve::linear_uniform(vec![1., 2.]),
+            color: Gradient::linear(vec![
+                (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
+                (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
+                (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
+            ]),
+            blend_mode: BlendMode::Blend,
+            linear_drag: 0.7,
+            pbr: true,
+            acceleration: Vec3::new(0., 0.3, 0.),
+            fade_scene: 3.5,
+            ..default()
+        },
+        Transform::from_xyz(0., 0.1, 0.),
+    ));
 
     // cube
     commands.spawn((
