@@ -59,8 +59,8 @@ fn setup(
             inherit_parent_velocity: true,
             initial_velocity: RandVec3::constant(Vec3::ZERO),
             initial_scale: RandF32 { min: 0.5, max: 1.3 },
-            scale_curve: FireworkCurve::from_samples_unit_domain(vec![1., 2.]),
-            color: FireworkGradient::from_uneven_samples(vec![
+            scale_curve: FireworkCurve::even_samples(vec![1., 2.]),
+            color: FireworkGradient::uneven_samples(vec![
                 (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
                 (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
                 (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),

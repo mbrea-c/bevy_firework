@@ -3,6 +3,7 @@ use cores::{EvenCore, EvenCoreError, UnevenCore, UnevenCoreError};
 use serde::{Deserialize, Serialize};
 
 /// This is just a convenience wrapper over some serializable built-in Bevy curve types
+/// These curves are all intended to have unit domain ([0, 1]).
 #[derive(Serialize, Deserialize, Clone, Reflect, Debug)]
 pub enum FireworkCurve<T> {
     SampleAuto(SampleAutoCurve<T>),
@@ -36,7 +37,7 @@ impl<T: Clone> FireworkCurve<T> {
     /// constant. If 2 samples, then UnevenSampleAutoCurve)
     ///
     /// If constant, the domain will be [0,1].
-    pub fn from_uneven_samples(samples: impl IntoIterator<Item = (f32, T)>) -> Self {
+    pub fn uneven_samples(samples: impl IntoIterator<Item = (f32, T)>) -> Self {
         // PERF: We only really need to get the first two items out to figure out the curve type.
         //       It shouldn't really affect performance much though, this function is not in hot path.
         let samples = samples.into_iter().collect::<Vec<_>>();
@@ -52,18 +53,7 @@ impl<T: Clone> FireworkCurve<T> {
 
     /// Creates an appropriate curve type based on the number of samples (e.g. if 1 sample, then
     /// constant. If 2 samples, then SampleAutoCurve)
-    pub fn from_samples(domain: Interval, samples: impl IntoIterator<Item = T>) -> Self {
-        let samples = samples.into_iter().collect::<Vec<_>>();
-        match samples.len() {
-            0 => panic!("Cannot create curve from 0 samples"),
-            1 => FireworkCurve::Constant(ConstantCurve::new(domain, samples[0].clone())),
-            _ => FireworkCurve::SampleAuto(SampleAutoCurve::new(domain, samples).unwrap()),
-        }
-    }
-
-    /// Creates an appropriate curve type based on the number of samples (e.g. if 1 sample, then
-    /// constant. If 2 samples, then SampleAutoCurve)
-    pub fn from_samples_unit_domain(samples: impl IntoIterator<Item = T>) -> Self {
+    pub fn even_samples(samples: impl IntoIterator<Item = T>) -> Self {
         // PERF: We only really need to get the first two items out to figure out the curve type.
         //       It shouldn't really affect performance much though, this function is not in hot path.
         let samples = samples.into_iter().collect::<Vec<_>>();
@@ -79,7 +69,7 @@ impl<T: Clone> FireworkCurve<T> {
         }
     }
 
-    pub fn constant_unit_domain(sample: T) -> Self {
+    pub fn constant(sample: T) -> Self {
         FireworkCurve::Constant(ConstantCurve::new(interval(0., 1.).unwrap(), sample))
     }
 }
@@ -176,6 +166,7 @@ where
 /// We currently cannot reuse [`FireworkCurve`] for colors because colors
 /// don't implement [`StableInterpolate`]. Instead, they implement [`Mix`] so we
 /// must define dedicated curve types to achieve the same goal.
+/// These curves are all intended to have unit domain ([0, 1]).
 #[derive(Serialize, Deserialize, Clone, Reflect, Debug)]
 pub enum FireworkGradient<T> {
     ColorSampleAuto(ColorSampleAutoCurve<T>),
@@ -212,7 +203,7 @@ where
     /// constant. If 2 samples, then UnevenSampleAutoCurve)
     ///
     /// If constant, the domain will be [0,1].
-    pub fn from_uneven_samples(samples: impl IntoIterator<Item = (f32, T)>) -> Self {
+    pub fn uneven_samples(samples: impl IntoIterator<Item = (f32, T)>) -> Self {
         // PERF: We only really need to get the first two items out to figure out the curve type.
         //       It shouldn't really affect performance much though, this function is not in hot path.
         let samples = samples.into_iter().collect::<Vec<_>>();
@@ -230,7 +221,7 @@ where
 
     /// Creates an appropriate curve type based on the number of samples (e.g. if 1 sample, then
     /// constant. If 2 samples, then SampleAutoCurve)
-    pub fn from_samples_unit_domain(samples: impl IntoIterator<Item = T>) -> Self {
+    pub fn even_samples(samples: impl IntoIterator<Item = T>) -> Self {
         let samples = samples.into_iter().collect::<Vec<_>>();
         match samples.len() {
             0 => panic!("Cannot create curve from 0 samples"),
@@ -242,7 +233,7 @@ where
         }
     }
 
-    pub fn constant_unit_domain(sample: T) -> Self {
+    pub fn constant(sample: T) -> Self {
         FireworkGradient::Constant(ConstantCurve::new(interval(0., 1.).unwrap(), sample))
     }
 }
