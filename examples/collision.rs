@@ -2,6 +2,7 @@ use avian3d::prelude::*;
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
     core::{BlendMode, ParticleCollisionSettings, ParticleSpawner},
+    curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
 };
@@ -63,9 +64,9 @@ fn setup(
                 min: 0.02,
                 max: 0.08,
             },
-            scale_curve: ParamCurve::constant(1.),
+            scale_curve: FireworkCurve::constant_unit_domain(1.),
             linear_drag: 0.15,
-            color: Gradient::linear(vec![
+            color: FireworkGradient::from_uneven_samples(vec![
                 (0., LinearRgba::new(10., 7., 1., 1.)),
                 (0.7, LinearRgba::new(3., 1., 1., 1.)),
                 (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),

@@ -1,3 +1,5 @@
+use crate::curve::{FireworkCurve, FireworkGradient};
+
 use super::emission_shape::EmissionShape;
 use bevy::{prelude::*, render::batching::NoAutomaticBatching};
 use bevy_utilitarian::prelude::*;
@@ -70,14 +72,15 @@ pub struct ParticleSpawner {
     pub inherit_parent_velocity: bool,
     /// Initial scale of particles
     pub initial_scale: RandF32,
-    /// Evolution of scale over time, applied as a factor to initial scale
-    pub scale_curve: ParamCurve<f32>,
+    /// Evolution of scale over time, applied as a factor to initial scale. The curve should have
+    /// domain [0,1]
+    pub scale_curve: FireworkCurve<f32>,
     /// Linear acceleration of particles
     pub acceleration: Vec3,
     /// Drag applied as a linear coefficient of velocity
     pub linear_drag: f32,
     /// Color over lifetime
-    pub color: Gradient,
+    pub color: FireworkGradient<LinearRgba>,
     /// Round out the particle with fading at the edges. If 0, no fading is applied. The value
     /// should be between 0 and 1.
     pub fade_edge: f32,
@@ -107,9 +110,9 @@ impl Default for ParticleSpawner {
             initial_velocity_radial: RandF32::constant(0.),
             inherit_parent_velocity: true,
             initial_scale: RandF32::constant(1.),
-            scale_curve: ParamCurve::linear_uniform(vec![1., 1.]),
+            scale_curve: FireworkCurve::from_samples_unit_domain(vec![1.]),
             acceleration: Vec3::new(0., -9.81, 0.),
-            color: Gradient::constant(LinearRgba::WHITE),
+            color: FireworkGradient::constant_unit_domain(LinearRgba::WHITE),
             blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
@@ -238,7 +241,7 @@ pub fn spawn_particles(
                     scale: initial_scale,
                     velocity,
                     age: 0.,
-                    color: settings.color.get(0.),
+                    color: settings.color.sample_clamped(0.),
                     pbr: settings.pbr,
                 })
             }
@@ -266,7 +269,7 @@ pub fn update_particles(
                     }
 
                     let age_percent = particle.age / particle.lifetime;
-                    let scale_factor = settings.scale_curve.get(age_percent);
+                    let scale_factor = settings.scale_curve.sample_clamped(age_percent);
 
                     particle.scale = particle.initial_scale * scale_factor;
 
@@ -297,7 +300,7 @@ pub fn update_particles(
                     particle.velocity += (settings.acceleration
                         - particle.velocity * settings.linear_drag)
                         * time.delta_secs();
-                    particle.color = settings.color.get(age_percent);
+                    particle.color = settings.color.sample_clamped(age_percent);
 
                     Some(particle)
                 })
