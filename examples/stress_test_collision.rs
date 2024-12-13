@@ -1,14 +1,12 @@
 use avian3d::{collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins};
 use bevy::{
-    core_pipeline::bloom::BloomSettings,
+    core_pipeline::bloom::Bloom,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
     prelude::*,
 };
 use bevy_firework::{
-    core::{
-        BlendMode, ParticleCollisionSettings, ParticleSpawnerBundle, ParticleSpawnerData,
-        ParticleSpawnerSettings,
-    },
+    core::{BlendMode, ParticleCollisionSettings, ParticleSpawner, ParticleSpawnerData},
+    curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
 };
@@ -20,13 +18,6 @@ fn main() {
     app.add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
         .add_plugins(PhysicsPlugins::default());
 
-    // For now,Msaa must be disabled on the web due to this:
-    // https://github.com/gfx-rs/wgpu/issues/5263
-    #[cfg(target_arch = "wasm32")]
-    app.insert_resource(Msaa::Off);
-
-    // The particle system plugin must be added **after** any changes
-    // to the MSAA setting.
     app.add_plugins(ParticleSystemPlugin::default())
         .init_resource::<DebugInfo>()
         .add_systems(Startup, setup)
@@ -76,127 +67,103 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // spawn text
-    // commands.spawn(TextBundle {
-    //     text: Text {
-    //         sections: vec![TextSection {
-    //             value: "Press Space to toggle slow motion".to_string(),
-    //             style: TextStyle {
-    //                 font_size: 40.0,
-    //                 color: Color::WHITE,
-    //                 ..default()
-    //             },
-    //         }],
-    //         ..Default::default()
-    //     },
-    //     transform: Transform::from_xyz(-4.0, 4.0, 0.0),
-    //     ..Default::default()
-    // });
-
-    // Text with multiple sections
     commands.spawn((
-        // Create a TextBundle that has a Text with a list of sections.
-        TextBundle::from_sections([TextSection::new(
-            "FPS: ",
-            TextStyle {
-                // This font is loaded and will be used instead of the default font.
-                font_size: 20.0,
-                ..default()
-            },
-        )]),
+        Text("FPS: ".to_string()),
+        TextFont {
+            font_size: 20.0,
+            ..default()
+        },
         DebugInfoText,
     ));
 
     // circular base
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::from_size(Vec3::new(8., 1., 8.))),
-            material: materials.add(Color::WHITE),
-            transform: Transform::from_translation(Vec3::new(0., -0.5, 0.)),
-            ..default()
-        })
-        .insert(Collider::cuboid(8., 1., 8.));
-    commands
-        .spawn(ParticleSpawnerBundle::from_settings(
-            ParticleSpawnerSettings {
-                rate: 80000.0,
-                one_shot: false,
-                emission_shape: EmissionShape::Circle {
-                    normal: Vec3::Y,
-                    radius: 0.3,
-                },
-                lifetime: RandF32::constant(2.0),
-                initial_velocity: RandVec3 {
-                    magnitude: RandF32 { min: 6., max: 8. },
-                    direction: Vec3::Y,
-                    spread: 30. / 180. * PI,
-                },
-                inherit_parent_velocity: true,
-                initial_scale: RandF32 {
-                    min: 0.02,
-                    max: 0.08,
-                },
-                scale_curve: ParamCurve::constant(1.),
-                linear_drag: 0.15,
-                color: Gradient::linear(vec![
-                    (0., LinearRgba::new(100., 70., 10., 1.)),
-                    (0.7, LinearRgba::new(3., 1., 1., 1.)),
-                    (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
-                    (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
-                    (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
-                ]),
-                blend_mode: BlendMode::Blend,
-                pbr: true,
-                collision_settings: Some(ParticleCollisionSettings {
-                    restitution: 0.6,
-                    friction: 0.2,
-                    filter: SpatialQueryFilter::default(),
-                }),
-                ..default()
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::from_size(Vec3::new(8., 1., 8.)))),
+        MeshMaterial3d(materials.add(Color::WHITE)),
+        Transform::from_translation(Vec3::new(0., -0.5, 0.)),
+        Collider::cuboid(8., 1., 8.),
+    ));
+
+    commands.spawn((
+        ParticleSpawner {
+            rate: 80000.0,
+            one_shot: false,
+            emission_shape: EmissionShape::Circle {
+                normal: Vec3::Y,
+                radius: 0.3,
             },
-        ))
-        .insert(Transform {
+            lifetime: RandF32::constant(2.0),
+            initial_velocity: RandVec3 {
+                magnitude: RandF32 { min: 6., max: 8. },
+                direction: Vec3::Y,
+                spread: 30. / 180. * PI,
+            },
+            inherit_parent_velocity: true,
+            initial_scale: RandF32 {
+                min: 0.02,
+                max: 0.08,
+            },
+            scale_curve: FireworkCurve::constant(1.),
+            linear_drag: 0.15,
+            color: FireworkGradient::uneven_samples(vec![
+                (0., LinearRgba::new(100., 70., 10., 1.)),
+                (0.7, LinearRgba::new(3., 1., 1., 1.)),
+                (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
+                (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
+                (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
+            ]),
+            blend_mode: BlendMode::Blend,
+            pbr: true,
+            collision_settings: Some(ParticleCollisionSettings {
+                restitution: 0.6,
+                friction: 0.2,
+                filter: SpatialQueryFilter::default(),
+            }),
+            ..default()
+        },
+        Transform {
             translation: Vec3::new(5., 0.5, 0.),
             rotation: Quat::from_rotation_z(PI / 4.),
             ..default()
-        });
+        },
+    ));
 
     // angled cube
-    commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::from_size(Vec3::ONE)),
-            material: materials.add(Color::from(LinearRgba::new(0.8, 0.7, 0.6, 1.))),
-            transform: Transform {
-                translation: Vec3::new(0., 0.5, 0.),
-                rotation: Quat::from_rotation_x(PI / 4.) * Quat::from_rotation_y(PI / 4.),
-                ..default()
-            },
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::from_size(Vec3::ONE))),
+        MeshMaterial3d(materials.add(Color::from(LinearRgba::new(0.8, 0.7, 0.6, 1.)))),
+        Transform {
+            translation: Vec3::new(0., 0.5, 0.),
+            rotation: Quat::from_rotation_x(PI / 4.) * Quat::from_rotation_y(PI / 4.),
             ..default()
-        })
-        .insert(Collider::cuboid(1., 1., 1.));
+        },
+        Collider::cuboid(1., 1., 1.),
+    ));
 
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 1500000.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
+
     // camera
     commands.spawn((
-        Camera3dBundle {
-            transform: Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-            camera: Camera {
-                hdr: true,
+        Camera3d::default(),
+        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Camera {
+            hdr: true,
 
-                ..default()
-            },
             ..default()
         },
-        BloomSettings::default(),
+        Bloom::default(),
+        // For now,Msaa must be disabled on the web due to this:
+        // https://github.com/gfx-rs/wgpu/issues/5263
+        #[cfg(target_arch = "wasm32")]
+        Msaa::Off,
     ));
 }
 
@@ -221,7 +188,7 @@ fn update_debug_info_text(
     mut debug_text_query: Query<&mut Text, With<DebugInfoText>>,
 ) {
     for mut text in &mut debug_text_query {
-        text.sections[0].value = format!("{:?}", debug_info);
+        text.0 = format!("{:?}", debug_info);
     }
 }
 
@@ -235,7 +202,7 @@ fn update_fps(mut debug_info: ResMut<DebugInfo>, diagnostics: Res<DiagnosticsSto
 
 fn update_particle_counts(
     mut debug_info: ResMut<DebugInfo>,
-    particle_systems: Query<(&ParticleSpawnerSettings, &ParticleSpawnerData)>,
+    particle_systems: Query<(&ParticleSpawner, &ParticleSpawnerData)>,
 ) {
     debug_info.particle_system_count = 0;
     debug_info.particle_count_collision = 0;

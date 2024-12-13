@@ -1,3 +1,5 @@
+use crate::curve::{FireworkCurve, FireworkGradient};
+
 use super::emission_shape::EmissionShape;
 use bevy::{prelude::*, render::batching::NoAutomaticBatching};
 use bevy_utilitarian::prelude::*;
@@ -45,8 +47,15 @@ impl From<BlendMode> for u32 {
 }
 
 #[derive(Component, Reflect, Clone, Debug, Serialize, Deserialize)]
+#[require(
+    ParticleSpawnerData,
+    Visibility,
+    Transform,
+    Mesh3d,
+    NoAutomaticBatching(|| NoAutomaticBatching)
+)]
 #[reflect(Component)]
-pub struct ParticleSpawnerSettings {
+pub struct ParticleSpawner {
     /// Particles per second
     pub rate: f32,
     /// Whether to spawn `rate` particles at once and then stop
@@ -63,14 +72,15 @@ pub struct ParticleSpawnerSettings {
     pub inherit_parent_velocity: bool,
     /// Initial scale of particles
     pub initial_scale: RandF32,
-    /// Evolution of scale over time, applied as a factor to initial scale
-    pub scale_curve: ParamCurve<f32>,
+    /// Evolution of scale over time, applied as a factor to initial scale. The curve should have
+    /// domain [0,1]
+    pub scale_curve: FireworkCurve<f32>,
     /// Linear acceleration of particles
     pub acceleration: Vec3,
     /// Drag applied as a linear coefficient of velocity
     pub linear_drag: f32,
     /// Color over lifetime
-    pub color: Gradient,
+    pub color: FireworkGradient<LinearRgba>,
     /// Round out the particle with fading at the edges. If 0, no fading is applied. The value
     /// should be between 0 and 1.
     pub fade_edge: f32,
@@ -85,11 +95,11 @@ pub struct ParticleSpawnerSettings {
     /// If Some, particles will collide with the scene according to the provided parameters
     /// If None, no particle collision will occur.
     pub collision_settings: Option<ParticleCollisionSettings>,
-    /// Whether to initialize the spawner in a disabled state
-    pub starts_disabled: bool,
+    /// Whether to initialize the spawner in an enabled state
+    pub starts_enabled: bool,
 }
 
-impl Default for ParticleSpawnerSettings {
+impl Default for ParticleSpawner {
     fn default() -> Self {
         Self {
             rate: 5.,
@@ -100,9 +110,9 @@ impl Default for ParticleSpawnerSettings {
             initial_velocity_radial: RandF32::constant(0.),
             inherit_parent_velocity: true,
             initial_scale: RandF32::constant(1.),
-            scale_curve: ParamCurve::linear_uniform(vec![1., 1.]),
+            scale_curve: FireworkCurve::even_samples(vec![1.]),
             acceleration: Vec3::new(0., -9.81, 0.),
-            color: Gradient::constant(LinearRgba::WHITE),
+            color: FireworkGradient::constant(LinearRgba::WHITE),
             blend_mode: BlendMode::Blend,
             linear_drag: 0.,
             pbr: false,
@@ -110,7 +120,7 @@ impl Default for ParticleSpawnerSettings {
             collision_settings: None,
             fade_edge: 0.7,
             fade_scene: 1.,
-            starts_disabled: false,
+            starts_enabled: true,
         }
     }
 }
@@ -135,53 +145,13 @@ impl std::fmt::Debug for ParticleCollisionSettings {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct ParticleSpawnerData {
+    pub initialized: bool,
     pub enabled: bool,
     pub cooldown: Timer,
     pub particles: Vec<ParticleData>,
     pub parent_velocity: Vec3,
-}
-
-impl Default for ParticleSpawnerData {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            cooldown: Timer::default(),
-            particles: vec![],
-            parent_velocity: Vec3::ZERO,
-        }
-    }
-}
-
-impl From<&ParticleSpawnerSettings> for ParticleSpawnerData {
-    fn from(settings: &ParticleSpawnerSettings) -> Self {
-        Self {
-            enabled: !settings.starts_disabled,
-            cooldown: Timer::from_seconds(1. / settings.rate, TimerMode::Repeating),
-            particles: vec![],
-            parent_velocity: Vec3::ZERO,
-        }
-    }
-}
-
-#[derive(Bundle)]
-pub struct ParticleSpawnerBundle {
-    spatial: SpatialBundle,
-    settings: ParticleSpawnerSettings,
-    mesh: Handle<Mesh>,
-    name: Name,
-}
-
-impl ParticleSpawnerBundle {
-    pub fn from_settings(settings: ParticleSpawnerSettings) -> Self {
-        Self {
-            settings,
-            spatial: SpatialBundle::default(),
-            mesh: DEFAULT_MESH.clone(),
-            name: Name::new("Particle System"),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -212,35 +182,23 @@ impl Default for EffectModifier {
     }
 }
 
-pub fn create_spawner_data(
-    mut commands: Commands,
-    mut spawners: Query<(Entity, &ParticleSpawnerSettings), Without<ParticleSpawnerData>>,
-) {
-    for (entity, settings) in &mut spawners {
-        commands
-            .entity(entity)
-            .insert(ParticleSpawnerData::from(settings))
-            .insert(NoAutomaticBatching);
-    }
-}
-
 pub fn sync_spawner_data(
-    mut spawners: Query<
-        (&ParticleSpawnerSettings, &mut ParticleSpawnerData),
-        Changed<ParticleSpawnerSettings>,
-    >,
+    mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
 ) {
     for (settings, mut data) in &mut spawners {
         data.cooldown
             .set_duration(Duration::from_secs_f32(1. / settings.rate));
         data.cooldown.set_mode(TimerMode::Repeating);
+        if !data.initialized {
+            data.enabled = settings.starts_enabled;
+        }
     }
 }
 
 pub fn spawn_particles(
     mut particle_systems_query: Query<(
         &GlobalTransform,
-        &ParticleSpawnerSettings,
+        &ParticleSpawner,
         &mut ParticleSpawnerData,
         Option<&EffectModifier>,
     )>,
@@ -283,7 +241,7 @@ pub fn spawn_particles(
                     scale: initial_scale,
                     velocity,
                     age: 0.,
-                    color: settings.color.get(0.),
+                    color: settings.color.sample_clamped(0.),
                     pbr: settings.pbr,
                 })
             }
@@ -292,7 +250,7 @@ pub fn spawn_particles(
 }
 
 pub fn update_particles(
-    mut particle_systems_query: Query<(&ParticleSpawnerSettings, &mut ParticleSpawnerData)>,
+    mut particle_systems_query: Query<(&ParticleSpawner, &mut ParticleSpawnerData)>,
     time: Res<Time>,
     #[cfg(feature = "physics_avian")] spatial_query: SpatialQuery,
 ) {
@@ -305,13 +263,13 @@ pub fn update_particles(
                 .filter_map(|particle| {
                     let mut particle = *particle;
 
-                    particle.age += time.delta_seconds();
+                    particle.age += time.delta_secs();
                     if particle.age >= particle.lifetime {
                         return None;
                     }
 
                     let age_percent = particle.age / particle.lifetime;
-                    let scale_factor = settings.scale_curve.get(age_percent);
+                    let scale_factor = settings.scale_curve.sample_clamped(age_percent);
 
                     particle.scale = particle.initial_scale * scale_factor;
 
@@ -321,13 +279,13 @@ pub fn update_particles(
                             particle_collision(
                                 particle.position,
                                 particle.velocity,
-                                time.delta_seconds(),
+                                time.delta_secs(),
                                 collision_settigs,
                                 &spatial_query,
                             )
                         } else {
                             (
-                                particle.position + particle.velocity * time.delta_seconds(),
+                                particle.position + particle.velocity * time.delta_secs(),
                                 particle.velocity,
                             )
                         };
@@ -341,8 +299,8 @@ pub fn update_particles(
                     particle.velocity = new_vel;
                     particle.velocity += (settings.acceleration
                         - particle.velocity * settings.linear_drag)
-                        * time.delta_seconds();
-                    particle.color = settings.color.get(age_percent);
+                        * time.delta_secs();
+                    particle.color = settings.color.sample_clamped(age_percent);
 
                     Some(particle)
                 })
@@ -354,7 +312,7 @@ pub fn propagate_particle_spawner_modifier(
     mut commands: Commands,
     modifiers: Query<(Entity, &EffectModifier)>,
     children_query: Query<&Children>,
-    particle_spawners: Query<&ParticleSpawnerSettings>,
+    particle_spawners: Query<&ParticleSpawner>,
 ) {
     for (entity, modifier) in &modifiers {
         for child in children_query.iter_descendants(entity) {
@@ -430,7 +388,7 @@ fn particle_collision(
             },
             vel.length() * delta,
             true,
-            collision_settings.filter.clone(),
+            &collision_settings.filter,
         ) {
             if hit.time_of_impact == 0. {
                 let mut normal = hit.normal;
