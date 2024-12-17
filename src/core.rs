@@ -291,7 +291,7 @@ pub fn update_particles(
                         };
                     #[cfg(not(feature = "physics_avian"))]
                     let (new_pos, new_vel) = (
-                        particle.position + particle.velocity * time.delta_seconds(),
+                        particle.position + particle.velocity * time.delta_secs(),
                         particle.velocity,
                     );
 
