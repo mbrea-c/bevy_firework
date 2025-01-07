@@ -390,7 +390,7 @@ fn particle_collision(
             true,
             &collision_settings.filter,
         ) {
-            if hit.time_of_impact == 0. {
+            if hit.distance == 0. {
                 let mut normal = hit.normal;
                 if normal == Vec3::ZERO {
                     if vel != Vec3::ZERO {
@@ -401,7 +401,7 @@ fn particle_collision(
                 }
                 pos += vel.length().max(1.) * normal * delta;
             } else {
-                pos += vel.normalize_or_zero() * hit.time_of_impact;
+                pos += vel.normalize_or_zero() * hit.distance;
                 let vel_reject = vel.reject_from(hit.normal);
                 let vel_project = vel.project_onto(hit.normal);
                 let friction_dv =
@@ -410,7 +410,7 @@ fn particle_collision(
                     - (friction_dv * vel_reject.normalize_or_zero())
                     - collision_settings.restitution * vel_project;
                 pos += hit.normal * 0.0001;
-                delta = (delta - hit.time_of_impact).clamp(0., orig_delta);
+                delta = (delta - hit.distance).clamp(0., orig_delta);
             }
         } else {
             pos += vel * delta;
