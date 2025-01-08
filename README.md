@@ -46,11 +46,12 @@ physics data for particle collision, simplified particle system animation).
 
 ## Version table
 
-| `bevy_firework` | `bevy` | `bevy_utilitarian` |
-| --------------- | ------ | ------------------ |
-| 0.1             | 0.12   | 0.2                |
+| `bevy_firework` | `bevy` | `bevy_utilitarian` | `avian`
+| --------------- | ------ | ------------------ | --------
+| 0.1             | 0.12   | 0.2                |  
 | 0.2             | 0.12   | 0.3                |
 | 0.3             | 0.13   | 0.4                |
 | 0.4             | 0.14   | 0.5                |
-| 0.5             | 0.14   | 0.5                |
-| main            | 0.15   | 0.6                |
+| 0.5             | 0.14   | 0.5                | 0.1
+| 0.6             | 0.15   | 0.6                | 0.2
+| main            | 0.15   | 0.6                | 0.2
