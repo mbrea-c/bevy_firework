@@ -1,21 +1,23 @@
 [package]
 name = "bevy_firework"
-version = "0.6.0"
-edition = "2021"
+version = "0.7.0"
+edition = "2024"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mbrea-c/bevy_firework"
 description = "CPU-driven, batch-rendered particle system for the Bevy game engine"
 keywords = ["bevy", "gamedev", "particles", "graphics"]
-resolver = "2"
 
 [dependencies]
-bevy = "0.15"
+bevy = "0.16"
 bytemuck = "1.14.3"
 rand = "0.8.5"
-bevy_utilitarian = "0.6"
+bevy_utilitarian = "0.7"
 serde = { version = "1.0", features = ["derive"] }
-avian3d = { version = "0.2", features = ["serialize"], optional = true }
+# avian3d = { version = "0.2", features = ["serialize"], optional = true }
+avian3d = { git = "https://github.com/Jondolf/avian.git", rev = "910ab042828986e27f32fc2e27f6f2ee5576df1e", features = [
+    "serialize",
+], optional = true }
 
 [features]
 default = ["physics_avian"]

@@ -3,21 +3,23 @@ use crate::plugin::PARTICLE_SHADER_HANDLE;
 use super::core::{ParticleData, ParticleSpawner, ParticleSpawnerData};
 use bevy::{
     core_pipeline::{
-        core_3d::{Transparent3d, CORE_3D_DEPTH_FORMAT},
+        core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d},
         prepass::{
             DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass, ViewPrepassTextures,
         },
     },
     ecs::{
         query::QueryItem,
-        system::{lifetimeless::*, SystemParamItem},
+        system::{SystemParamItem, lifetimeless::*},
     },
     pbr::{
         MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshViewBindGroup,
         ShadowFilteringMethod,
     },
+    platform::collections::HashMap,
     prelude::*,
     render::{
+        Render, RenderApp, RenderSet,
         extract_component::{
             ComponentUniforms, DynamicUniformIndex, ExtractComponent, ExtractComponentPlugin,
             UniformComponentPlugin,
@@ -31,9 +33,7 @@ use bevy::{
         renderer::RenderDevice,
         sync_world::MainEntity,
         view::{ExtractedView, ViewTarget},
-        Render, RenderApp, RenderSet,
     },
-    utils::HashMap,
 };
 use bytemuck::{Pod, Zeroable};
 
@@ -155,6 +155,7 @@ impl DummyDepthTextures {
                     mip_level_count: Some(1),
                     base_array_layer: 0,
                     array_layer_count: Some(1),
+                    usage: None,
                 });
             self.textures.insert(sample_count, texture.clone());
             self.textures.get(&sample_count).unwrap()
@@ -175,7 +176,6 @@ fn queue_custom(
     particle_materials: Query<(Entity, &MainEntity, &ParticleMaterialData)>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut views: Query<(
-        Entity,
         &ExtractedView,
         Option<&ShadowFilteringMethod>,
         &Msaa,
@@ -190,7 +190,6 @@ fn queue_custom(
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
 
     for (
-        view_entity,
         view,
         maybe_shadow_filtering_method,
         msaa,
@@ -206,7 +205,8 @@ fn queue_custom(
         );
         let custom_pipeline = firework_pipelines.get(msaa.samples());
         let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
-        let Some(transparent_phase) = transparent_render_phases.get_mut(&view_entity) else {
+        let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
+        else {
             continue;
         };
         let mut view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
@@ -273,7 +273,8 @@ fn queue_custom(
                 draw_function: draw_custom,
                 distance: rangefinder.distance_translation(&mesh_instance.translation),
                 batch_range: 0..1,
-                extra_index: PhaseItemExtraIndex::NONE,
+                extra_index: PhaseItemExtraIndex::None,
+                indexed: true,
             });
         }
     }

@@ -1,4 +1,4 @@
-use avian3d::{collision::Collider, spatial_query::SpatialQueryFilter, PhysicsPlugins};
+use avian3d::{PhysicsPlugins, collision::Collider, spatial_query::SpatialQueryFilter};
 use bevy::{
     core_pipeline::bloom::Bloom,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},

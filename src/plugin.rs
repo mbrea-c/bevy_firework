@@ -2,13 +2,13 @@ use crate::core::setup_default_mesh;
 
 use super::{
     core::{
-        propagate_particle_spawner_modifier, spawn_particles, sync_spawner_data, update_particles,
-        ParticleSpawner,
+        ParticleSpawner, propagate_particle_spawner_modifier, spawn_particles, sync_spawner_data,
+        update_particles,
     },
     render,
 };
 use bevy::{
-    asset::load_internal_asset,
+    asset::{load_internal_asset, weak_handle},
     ecs::{intern::Interned, schedule::ScheduleLabel},
     prelude::*,
 };
@@ -17,7 +17,7 @@ use bevy::{
 use super::core::sync_parent_velocity;
 
 pub const PARTICLE_SHADER_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(272481238906797053434642785120685433641);
+    weak_handle!("bdd76c4f-ce8a-45e4-a8d9-7f0470bed2f8");
 
 pub struct ParticleSystemPlugin {
     pub update_schedule: Interned<dyn ScheduleLabel>,
@@ -47,9 +47,9 @@ impl Plugin for ParticleSystemPlugin {
             .add_systems(
                 self.update_schedule,
                 (
-                    apply_deferred,
+                    ApplyDeferred,
                     propagate_particle_spawner_modifier,
-                    apply_deferred,
+                    ApplyDeferred,
                     sync_spawner_data,
                     #[cfg(feature = "physics_avian")]
                     sync_parent_velocity,
