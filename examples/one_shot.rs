@@ -7,7 +7,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_firework::{
-    core::{BlendMode, ParticleSpawner, ParticleSpawnerData, SpawnTransformMode},
+    core::{BlendMode, ParticleSpawner, ParticleSpawnerFinished, SpawnTransformMode},
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
@@ -20,7 +20,10 @@ fn main() {
 
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (adjust_time_scale, cleanup_old_particle_systems));
+        .add_systems(Update, adjust_time_scale)
+        .add_systems(Update, |query: Query<&ParticleSpawner>| {
+            let particle_system_count = query.iter().len();
+        });
     #[cfg(feature = "physics_avian")]
     app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
@@ -94,46 +97,53 @@ fn setup(
                             }
                         });
 
-                        commands.spawn((
-                            ParticleSpawner {
-                                one_shot: true,
-                                rate: 20.,
-                                emission_shape: EmissionShape::Circle {
-                                    normal: Vec3::Y,
-                                    radius: 0.4,
+                        commands
+                            .spawn((
+                                ParticleSpawner {
+                                    one_shot: true,
+                                    rate: 20.,
+                                    emission_shape: EmissionShape::Circle {
+                                        normal: Vec3::Y,
+                                        radius: 0.4,
+                                    },
+                                    lifetime: RandF32::constant(2.5),
+                                    inherit_parent_velocity: true,
+                                    initial_velocity: RandVec3 {
+                                        direction: Vec3::Y,
+                                        magnitude: RandF32 { min: 0., max: 2. },
+                                        spread: 0.,
+                                    },
+                                    initial_velocity_radial: RandF32 { min: 0., max: 2.5 },
+                                    initial_scale: RandF32 {
+                                        min: (impulse / 10. - 0.1).max(0.),
+                                        max: (impulse / 10. + 0.1).min(1.),
+                                    },
+                                    scale_curve: FireworkCurve::even_samples(vec![1., 2.]),
+                                    color: FireworkGradient::uneven_samples(vec![
+                                        (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
+                                        (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
+                                        (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
+                                    ]),
+                                    blend_mode: BlendMode::Blend,
+                                    linear_drag: 0.7,
+                                    pbr: true,
+                                    acceleration: Vec3::new(0., -1.5, 0.),
+                                    fade_scene: 3.5,
+                                    spawn_transform_mode: SpawnTransformMode::Local,
+                                    ..default()
                                 },
-                                lifetime: RandF32::constant(2.5),
-                                inherit_parent_velocity: true,
-                                initial_velocity: RandVec3 {
-                                    direction: Vec3::Y,
-                                    magnitude: RandF32 { min: 0., max: 2. },
-                                    spread: 0.,
+                                Transform {
+                                    translation,
+                                    rotation: Quat::from_rotation_arc(Vec3::Y, normal),
+                                    ..default()
                                 },
-                                initial_velocity_radial: RandF32 { min: 0., max: 2.5 },
-                                initial_scale: RandF32 {
-                                    min: (impulse / 10. - 0.1).max(0.),
-                                    max: (impulse / 10. + 0.1).min(1.),
+                            ))
+                            .observe(
+                                |trigger: Trigger<ParticleSpawnerFinished>,
+                                 mut commands: Commands| {
+                                    commands.entity(trigger.target()).despawn();
                                 },
-                                scale_curve: FireworkCurve::even_samples(vec![1., 2.]),
-                                color: FireworkGradient::uneven_samples(vec![
-                                    (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
-                                    (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
-                                    (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
-                                ]),
-                                blend_mode: BlendMode::Blend,
-                                linear_drag: 0.7,
-                                pbr: true,
-                                acceleration: Vec3::new(0., -1.5, 0.),
-                                fade_scene: 3.5,
-                                spawn_transform_mode: SpawnTransformMode::Local,
-                                ..default()
-                            },
-                            Transform {
-                                translation,
-                                rotation: Quat::from_rotation_arc(Vec3::Y, normal),
-                                ..default()
-                            },
-                        ));
+                            );
                     });
             },
         );
@@ -186,18 +196,6 @@ fn spawn_wall(
             ..default()
         },
     ));
-}
-
-fn cleanup_old_particle_systems(
-    query: Query<(Entity, &ParticleSpawnerData)>,
-    mut commands: Commands,
-) {
-    for (entity, data) in &query {
-        if data.particles.is_empty() && !data.enabled && data.initialized {
-            println!("Deleting system {:?}", entity);
-            commands.entity(entity).despawn();
-        }
-    }
 }
 
 fn adjust_time_scale(

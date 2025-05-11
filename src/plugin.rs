@@ -1,4 +1,4 @@
-use crate::core::setup_default_mesh;
+use crate::core::{notify_finished_particle_spawners, setup_default_mesh};
 
 use super::{
     core::{
@@ -55,6 +55,7 @@ impl Plugin for ParticleSystemPlugin {
                     sync_parent_velocity,
                     spawn_particles,
                     update_particles,
+                    notify_finished_particle_spawners,
                 )
                     .chain(),
             );

@@ -165,6 +165,8 @@ pub struct ParticleSpawnerData {
     pub cooldown: Timer,
     pub particles: Vec<ParticleData>,
     pub parent_velocity: Vec3,
+    /// Whether we have already sent an event about the particle system having finished
+    pub finished_notified: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -194,6 +196,9 @@ impl Default for EffectModifier {
         }
     }
 }
+
+#[derive(Event)]
+pub struct ParticleSpawnerFinished;
 
 pub fn sync_spawner_data(
     mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
@@ -327,6 +332,25 @@ pub fn update_particles(
                 })
                 .collect();
         });
+}
+
+/// System that triggers observers on `ParticleSpawnerFinished` events once when a one-shot
+/// particle system has "finished" (spawned all particles and they have all expired).
+pub fn notify_finished_particle_spawners(
+    mut commands: Commands,
+    mut particle_systems_query: Query<(Entity, &ParticleSpawner, &mut ParticleSpawnerData)>,
+) {
+    for (entity, settings, mut data) in &mut particle_systems_query {
+        if data.particles.is_empty()
+            && settings.one_shot
+            && !data.enabled
+            && data.initialized
+            && !data.finished_notified
+        {
+            commands.trigger_targets(ParticleSpawnerFinished, entity);
+            data.finished_notified = true;
+        }
+    }
 }
 
 pub fn propagate_particle_spawner_modifier(
