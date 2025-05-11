@@ -12,13 +12,22 @@ use avian3d::prelude::*;
 pub const DEFAULT_MESH: Handle<Mesh> = weak_handle!("ba671aee-04f4-485d-9d1e-ad7053dacfab");
 
 /// Mirrors AlphaMode, but implements serialize and deserialize
-#[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect, Serialize, Deserialize)]
 pub enum BlendMode {
     Opaque,
     Blend,
     Premultiplied,
     Add,
     Multiply,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Reflect, Serialize, Deserialize)]
+pub enum SpawnTransformMode {
+    /// Use `GlobalTransform` to determine the initial position of spawned particles
+    #[default]
+    Global,
+    /// Use `Transform` to determine the initial position of spawned particles
+    Local,
 }
 
 impl From<BlendMode> for AlphaMode {
@@ -96,6 +105,8 @@ pub struct ParticleSpawner {
     pub collision_settings: Option<ParticleCollisionSettings>,
     /// Whether to initialize the spawner in an enabled state
     pub starts_enabled: bool,
+    /// Determines how to compute the initial position of the spawned particles
+    pub spawn_transform_mode: SpawnTransformMode,
 }
 
 impl Default for ParticleSpawner {
@@ -120,6 +131,7 @@ impl Default for ParticleSpawner {
             fade_edge: 0.7,
             fade_scene: 1.,
             starts_enabled: true,
+            spawn_transform_mode: default(),
         }
     }
 }
@@ -146,6 +158,8 @@ impl std::fmt::Debug for ParticleCollisionSettings {
 
 #[derive(Component, Default)]
 pub struct ParticleSpawnerData {
+    /// Whether this particle system has already been initialized from the settings.
+    // NOTE: This won't be needed once we have `Construct`
     pub initialized: bool,
     pub enabled: bool,
     pub cooldown: Timer,
@@ -190,12 +204,14 @@ pub fn sync_spawner_data(
         data.cooldown.set_mode(TimerMode::Repeating);
         if !data.initialized {
             data.enabled = settings.starts_enabled;
+            data.initialized = true;
         }
     }
 }
 
 pub fn spawn_particles(
     mut particle_systems_query: Query<(
+        &Transform,
         &GlobalTransform,
         &ParticleSpawner,
         &mut ParticleSpawnerData,
@@ -203,7 +219,9 @@ pub fn spawn_particles(
     )>,
     time: Res<Time>,
 ) {
-    for (global_transform, settings, mut data, opt_modifier) in &mut particle_systems_query {
+    for (transform, global_transform, settings, mut data, opt_modifier) in
+        &mut particle_systems_query
+    {
         if data.enabled {
             data.cooldown.tick(time.delta());
 
@@ -216,7 +234,11 @@ pub fn spawn_particles(
             };
 
             let modifier = opt_modifier.cloned().unwrap_or_default();
-            let origin = global_transform.compute_transform();
+
+            let origin = match settings.spawn_transform_mode {
+                SpawnTransformMode::Global => global_transform.compute_transform(),
+                SpawnTransformMode::Local => *transform,
+            };
 
             for _ in 0..particles_to_spawn {
                 let spawn_offset = settings.emission_shape.generate_point();

@@ -21,6 +21,10 @@ default = ["physics_avian"]
 physics_avian = ["dep:avian3d"]
 
 [[example]]
+name = "one_shot"
+required-features = ["physics_avian"]
+
+[[example]]
 name = "collision"
 required-features = ["physics_avian"]
 
