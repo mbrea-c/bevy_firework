@@ -20,10 +20,7 @@ fn main() {
 
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, adjust_time_scale)
-        .add_systems(Update, |query: Query<&ParticleSpawner>| {
-            let particle_system_count = query.iter().len();
-        });
+        .add_systems(Update, adjust_time_scale);
     #[cfg(feature = "physics_avian")]
     app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
