@@ -1,7 +1,7 @@
 use crate::curve::{FireworkCurve, FireworkGradient};
 
 use super::emission_shape::EmissionShape;
-use bevy::{prelude::*, render::batching::NoAutomaticBatching};
+use bevy::{asset::weak_handle, prelude::*, render::batching::NoAutomaticBatching};
 use bevy_utilitarian::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -9,8 +9,7 @@ use std::time::Duration;
 #[cfg(feature = "physics_avian")]
 use avian3d::prelude::*;
 
-pub const DEFAULT_MESH: Handle<Mesh> =
-    Handle::weak_from_u128(164408926256276437310893021157813788765);
+pub const DEFAULT_MESH: Handle<Mesh> = weak_handle!("ba671aee-04f4-485d-9d1e-ad7053dacfab");
 
 /// Mirrors AlphaMode, but implements serialize and deserialize
 #[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
@@ -52,7 +51,7 @@ impl From<BlendMode> for u32 {
     Visibility,
     Transform,
     Mesh3d,
-    NoAutomaticBatching(|| NoAutomaticBatching)
+    NoAutomaticBatching
 )]
 #[reflect(Component)]
 pub struct ParticleSpawner {

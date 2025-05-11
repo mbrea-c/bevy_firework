@@ -16,7 +16,7 @@ use std::f32::consts::PI;
 
 fn main() {
     let mut app = App::new();
-    app.add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin))
+    app.add_plugins((DefaultPlugins, FrameTimeDiagnosticsPlugin::default()))
         .add_plugins(PhysicsPlugins::default());
 
     app.add_plugins(ParticleSystemPlugin::default())
