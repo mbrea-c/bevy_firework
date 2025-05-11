@@ -14,10 +14,7 @@ bytemuck = "1.14.3"
 rand = "0.8.5"
 bevy_utilitarian = "0.7"
 serde = { version = "1.0", features = ["derive"] }
-# avian3d = { version = "0.2", features = ["serialize"], optional = true }
-avian3d = { git = "https://github.com/Jondolf/avian.git", rev = "910ab042828986e27f32fc2e27f6f2ee5576df1e", features = [
-    "serialize",
-], optional = true }
+avian3d = { version = "0.3", features = ["serialize"], optional = true }
 
 [features]
 default = ["physics_avian"]
