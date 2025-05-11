@@ -54,4 +54,4 @@ physics data for particle collision, simplified particle system animation).
 | 0.4             | 0.14   | 0.5                |
 | 0.5             | 0.14   | 0.5                | 0.1
 | 0.6             | 0.15   | 0.6                | 0.2
-| main            | 0.15   | 0.6                | 0.2
+| main            | 0.16   | 0.7                | 0.3
