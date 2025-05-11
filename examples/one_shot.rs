@@ -7,7 +7,7 @@ use bevy::{
     prelude::*,
 };
 use bevy_firework::{
-    core::{BlendMode, ParticleSpawner, SpawnTransformMode},
+    core::{BlendMode, ParticleSpawner, ParticleSpawnerData, SpawnTransformMode},
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
@@ -20,18 +20,12 @@ fn main() {
 
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (adjust_time_scale, rotate_point_light));
+        .add_systems(Update, (adjust_time_scale, cleanup_old_particle_systems));
     #[cfg(feature = "physics_avian")]
     app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
     app.run();
 }
-
-const BOUNCE_POS: Vec3 = Vec3 {
-    x: 2.,
-    y: -2.4,
-    z: -2.,
-};
 
 const BALL_RADIUS: f32 = 0.5;
 
@@ -194,13 +188,15 @@ fn spawn_wall(
     ));
 }
 
-fn rotate_point_light(mut point_lights: Query<&mut Transform, With<PointLight>>, time: Res<Time>) {
-    for mut transform in &mut point_lights {
-        transform.translation = Vec3::new(
-            4. * time.elapsed_secs().sin(),
-            8. * ((time.elapsed_secs() * 0.78932).sin() + 1.) / 2.,
-            4. * time.elapsed_secs().cos(),
-        );
+fn cleanup_old_particle_systems(
+    query: Query<(Entity, &ParticleSpawnerData)>,
+    mut commands: Commands,
+) {
+    for (entity, data) in &query {
+        if data.particles.is_empty() && !data.enabled && data.initialized {
+            println!("Deleting system {:?}", entity);
+            commands.entity(entity).despawn();
+        }
     }
 }
 

@@ -158,6 +158,8 @@ impl std::fmt::Debug for ParticleCollisionSettings {
 
 #[derive(Component, Default)]
 pub struct ParticleSpawnerData {
+    /// Whether this particle system has already been initialized from the settings.
+    // NOTE: This won't be needed once we have `Construct`
     pub initialized: bool,
     pub enabled: bool,
     pub cooldown: Timer,
@@ -202,6 +204,7 @@ pub fn sync_spawner_data(
         data.cooldown.set_mode(TimerMode::Repeating);
         if !data.initialized {
             data.enabled = settings.starts_enabled;
+            data.initialized = true;
         }
     }
 }
