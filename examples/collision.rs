@@ -1,7 +1,7 @@
 use avian3d::prelude::*;
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
-    core::{BlendMode, ParticleCollisionSettings, ParticleSpawner},
+    core::{BlendMode, EmissionMode, ParticleCollisionSettings, ParticleSpawner},
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
@@ -47,8 +47,7 @@ fn setup(
 
     commands.spawn((
         ParticleSpawner {
-            rate: 100.0,
-            one_shot: false,
+            emission_mode: EmissionMode::Rate(100.),
             emission_shape: EmissionShape::Circle {
                 normal: Vec3::Y,
                 radius: 0.3,

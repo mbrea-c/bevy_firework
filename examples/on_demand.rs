@@ -1,6 +1,11 @@
+//! This example demonstrates how to set up a particle system that emits particles on demand (e.g.
+//! one particle per mouse click). Useful for example if you have a particle system to render
+//! ejected shells from a gun in a shooter game; this will be more efficient than creating a new
+//! particle system every time, and simpler than manually restarting a long-living one-shot particle system.
+
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
-    core::{BlendMode, EmissionMode, ParticleSpawner},
+    core::{BlendMode, EmissionMode, ParticleSpawner, ParticleSpawnerData},
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
@@ -14,7 +19,7 @@ fn main() {
 
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, adjust_time_scale);
+        .add_systems(Update, (adjust_time_scale, manually_queue_particles));
 
     #[cfg(feature = "physics_avian")]
     app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
@@ -30,7 +35,7 @@ fn setup(
 ) {
     // spawn text
     commands.spawn((
-        Text("Press Space to toggle slow motion".to_string()),
+        Text("Press Space to toggle slow motion\nLeft click to spawn particles".to_string()),
         TextFont {
             font_size: 40.0,
             ..default()
@@ -45,9 +50,10 @@ fn setup(
         MeshMaterial3d(materials.add(Color::WHITE)),
         Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
     ));
+
     commands.spawn((
         ParticleSpawner {
-            emission_mode: EmissionMode::Rate(1000.),
+            emission_mode: EmissionMode::OnDemand,
             emission_shape: EmissionShape::Circle {
                 normal: Vec3::Y,
                 radius: 0.3,
@@ -118,5 +124,16 @@ fn adjust_time_scale(
         time.set_relative_speed(0.05);
     } else {
         time.set_relative_speed(1.0);
+    }
+}
+
+fn manually_queue_particles(
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut q_particle_data: Query<&mut ParticleSpawnerData>,
+) {
+    if buttons.just_pressed(MouseButton::Left) {
+        for mut data in &mut q_particle_data {
+            data.queue_particles(1);
+        }
     }
 }
