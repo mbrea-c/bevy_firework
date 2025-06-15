@@ -11,6 +11,22 @@ use avian3d::prelude::*;
 
 pub const DEFAULT_MESH: Handle<Mesh> = weak_handle!("ba671aee-04f4-485d-9d1e-ad7053dacfab");
 
+#[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
+pub enum EmissionMode {
+    /// Number of particles emitted at once
+    OneShot(usize),
+    /// Rate of particles per second
+    Rate(f32),
+    /// Particles get emitted on method calls
+    OnDemand,
+}
+
+impl EmissionMode {
+    pub fn is_one_shot(&self) -> bool {
+        matches!(self, EmissionMode::OneShot(_))
+    }
+}
+
 /// Mirrors AlphaMode, but implements serialize and deserialize
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect, Serialize, Deserialize)]
 pub enum BlendMode {
@@ -64,10 +80,8 @@ impl From<BlendMode> for u32 {
 )]
 #[reflect(Component)]
 pub struct ParticleSpawner {
-    /// Particles per second
-    pub rate: f32,
-    /// Whether to spawn `rate` particles at once and then stop
-    pub one_shot: bool,
+    /// Determines the way this spawner creates particles over time
+    pub emission_mode: EmissionMode,
     /// Shape on which to spawn particles
     pub emission_shape: EmissionShape,
     /// Lifetime of a particle
@@ -112,8 +126,7 @@ pub struct ParticleSpawner {
 impl Default for ParticleSpawner {
     fn default() -> Self {
         Self {
-            rate: 5.,
-            one_shot: false,
+            emission_mode: EmissionMode::Rate(5.),
             emission_shape: EmissionShape::Point,
             lifetime: RandF32::constant(5.),
             initial_velocity: RandVec3::constant(Vec3::ZERO),
@@ -167,6 +180,14 @@ pub struct ParticleSpawnerData {
     pub parent_velocity: Vec3,
     /// Whether we have already sent an event about the particle system having finished
     pub finished_notified: bool,
+    /// Number of particles manually queued for creation this frame
+    pub manual_queued_count: usize,
+}
+
+impl ParticleSpawnerData {
+    pub fn queue_particles(&mut self, count: usize) {
+        self.manual_queued_count += count;
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -204,9 +225,11 @@ pub fn sync_spawner_data(
     mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
 ) {
     for (settings, mut data) in &mut spawners {
-        data.cooldown
-            .set_duration(Duration::from_secs_f32(1. / settings.rate));
-        data.cooldown.set_mode(TimerMode::Repeating);
+        if let EmissionMode::Rate(rate) = &settings.emission_mode {
+            data.cooldown
+                .set_duration(Duration::from_secs_f32(1. / rate));
+            data.cooldown.set_mode(TimerMode::Repeating);
+        }
         if !data.initialized {
             data.enabled = settings.starts_enabled;
             data.initialized = true;
@@ -230,12 +253,17 @@ pub fn spawn_particles(
         if data.enabled {
             data.cooldown.tick(time.delta());
 
-            let particles_to_spawn = if settings.one_shot {
-                data.enabled = false;
-
-                settings.rate as u32
-            } else {
-                data.cooldown.times_finished_this_tick()
+            let particles_to_spawn = match &settings.emission_mode {
+                EmissionMode::OneShot(count) => {
+                    data.enabled = false;
+                    *count
+                }
+                EmissionMode::Rate(_) => data.cooldown.times_finished_this_tick() as usize,
+                EmissionMode::OnDemand => {
+                    let count = data.manual_queued_count;
+                    data.manual_queued_count = 0;
+                    count
+                }
             };
 
             let modifier = opt_modifier.cloned().unwrap_or_default();
@@ -342,7 +370,7 @@ pub fn notify_finished_particle_spawners(
 ) {
     for (entity, settings, mut data) in &mut particle_systems_query {
         if data.particles.is_empty()
-            && settings.one_shot
+            && settings.emission_mode.is_one_shot()
             && !data.enabled
             && data.initialized
             && !data.finished_notified
