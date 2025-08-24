@@ -8,10 +8,7 @@ use bevy::{
             DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass, ViewPrepassTextures,
         },
     },
-    ecs::{
-        query::QueryItem,
-        system::{SystemParamItem, lifetimeless::*},
-    },
+    ecs::system::{SystemParamItem, lifetimeless::*},
     pbr::{
         MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshViewBindGroup,
         ShadowFilteringMethod,
@@ -19,11 +16,8 @@ use bevy::{
     platform::collections::HashMap,
     prelude::*,
     render::{
-        Render, RenderApp, RenderSet,
-        extract_component::{
-            ComponentUniforms, DynamicUniformIndex, ExtractComponent, ExtractComponentPlugin,
-            UniformComponentPlugin,
-        },
+        Extract, Render, RenderApp, RenderSet,
+        extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
         primitives::Aabb,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
@@ -42,12 +36,18 @@ pub struct CustomMaterialPlugin;
 impl Plugin for CustomMaterialPlugin {
     fn build(&self, app: &mut App) {
         app //
-            .add_plugins(ExtractComponentPlugin::<ParticleSpawnerData>::default())
             .add_plugins(UniformComponentPlugin::<FireworkUniform>::default())
             .add_systems(Last, update_aabbs);
-        app.sub_app_mut(RenderApp)
+
+        let render_app = app.sub_app_mut(RenderApp);
+
+        render_app
             .add_render_command::<Transparent3d, DrawCustom>()
             .init_resource::<SpecializedRenderPipelines<FireworkPipeline>>()
+            .add_systems(
+                ExtractSchedule,
+                (cleanup_firework_components, extract_firework_components).chain(),
+            )
             .add_systems(
                 Render,
                 (
@@ -72,7 +72,8 @@ impl Plugin for CustomMaterialPlugin {
 pub struct ParticleInstance {
     position: Vec3,
     scale: f32,
-    color: [f32; 4],
+    base_color: [f32; 4],
+    emissive_color: [f32; 4],
 }
 
 impl From<&ParticleData> for ParticleInstance {
@@ -80,7 +81,8 @@ impl From<&ParticleData> for ParticleInstance {
         Self {
             position: value.position,
             scale: value.scale,
-            color: value.color.to_f32_array(),
+            base_color: value.base_color.to_f32_array(),
+            emissive_color: value.emissive_color.to_f32_array(),
         }
     }
 }
@@ -92,30 +94,66 @@ pub struct ParticleMaterialData {
     alpha_mode: AlphaMode,
 }
 
-impl ExtractComponent for ParticleSpawnerData {
-    type QueryData = (&'static ParticleSpawnerData, &'static ParticleSpawner);
-    type QueryFilter = ();
-    type Out = (ParticleMaterialData, FireworkUniform);
-
-    fn extract_component(item: QueryItem<'_, Self::QueryData>) -> Option<Self::Out> {
-        let (data, settings) = item;
-        if data.particles.is_empty() {
-            None
-        } else {
-            Some((
+fn extract_component(
+    item: (&ParticleSpawnerData, &ParticleSpawner),
+) -> Vec<(
+    FireworkRenderEntityMarker,
+    ParticleMaterialData,
+    FireworkUniform,
+)> {
+    let (data, settings) = item;
+    data.particles
+        .iter()
+        .enumerate()
+        .filter(|(_, particles)| !particles.is_empty())
+        .map(|(index, particles)| {
+            let particle_settings = &settings.particle_settings[index];
+            (
+                FireworkRenderEntityMarker,
                 ParticleMaterialData {
-                    particles: data.particles.iter().map(|p| p.into()).collect(),
-                    alpha_mode: settings.blend_mode.into(),
+                    particles: particles.iter().map(|p| p.into()).collect(),
+                    alpha_mode: particle_settings.blend_mode.into(),
                 },
                 FireworkUniform {
-                    alpha_mode: settings.blend_mode.into(),
-                    pbr: settings.pbr.into(),
-                    fade_edge: settings.fade_edge,
-                    fade_scene: settings.fade_scene,
+                    alpha_mode: particle_settings.blend_mode.into(),
+                    pbr: particle_settings.pbr.into(),
+                    fade_edge: particle_settings.fade_edge,
+                    fade_scene: particle_settings.fade_scene,
                 },
-            ))
+            )
+        })
+        .collect()
+}
+
+#[derive(Component)]
+pub struct FireworkRenderEntityMarker;
+
+/// Due to persistence of the render world, we clean up every frame
+// TODO: Maybe add some logic to only despawn orphaned render entities if we see performance issues
+fn cleanup_firework_components(
+    mut commands: Commands,
+    query: Query<Entity, With<FireworkRenderEntityMarker>>,
+) {
+    for entity in &query {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// We need to do some custom extraction since each spawner entity can produce several render
+/// entities
+fn extract_firework_components(
+    mut commands: Commands,
+    mut previous_len: Local<usize>,
+    query: Extract<Query<(Entity, (&ParticleSpawnerData, &ParticleSpawner))>>,
+) {
+    let mut values = Vec::with_capacity(*previous_len);
+    for (entity, query_item) in &query {
+        for bundle in extract_component(query_item) {
+            values.push((MainEntity::from(entity), bundle));
         }
     }
+    *previous_len = values.len();
+    commands.spawn_batch(values);
 }
 
 #[derive(Resource, Default)]
@@ -370,24 +408,16 @@ pub fn prepare_firework_bindgroup(
     if let Some(binding) = firework_uniforms.uniforms().binding() {
         for (entity, msaa, view_prepass_textures_opt) in &view_query {
             let bindgroup_layout = firework_uniform_layouts.get(msaa.samples());
-            let mut entries = vec![BindGroupEntry {
-                binding: 0,
-                resource: binding.clone(),
-            }];
-            if let Some(depth) = view_prepass_textures_opt.and_then(|vpt| vpt.depth.as_ref()) {
-                entries.push(BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(&depth.texture.default_view),
-                });
-            } else {
-                // Push a dummy depth texture view
-                entries.push(BindGroupEntry {
-                    binding: 1,
-                    resource: BindingResource::TextureView(
-                        dummy_depth_textures.get(msaa.samples(), &render_device),
-                    ),
-                });
-            }
+
+            let entries = BindGroupEntries::sequential((
+                binding.clone(),
+                if let Some(depth) = view_prepass_textures_opt.and_then(|vpt| vpt.depth.as_ref()) {
+                    &depth.texture.default_view
+                } else {
+                    dummy_depth_textures.get(msaa.samples(), &render_device)
+                },
+            ));
+
             commands.entity(entity).insert(FireworkUniformBindgroup {
                 bindgroup: render_device.create_bind_group(
                     "Firework Uniform Bindgroup",
@@ -407,11 +437,13 @@ fn update_aabbs(mut query: Query<(&mut Aabb, &GlobalTransform, &ParticleSpawnerD
         let min = spawner_data
             .particles
             .iter()
+            .flat_map(|i| i.iter())
             .map(|p| p.position - Vec3::splat(p.scale))
             .fold(Vec3::MAX, |acc, v| acc.min(v));
         let max = spawner_data
             .particles
             .iter()
+            .flat_map(|i| i.iter())
             .map(|p| p.position + Vec3::splat(p.scale))
             .fold(Vec3::MIN, |acc, v| acc.max(v));
         let center = (min + max) / 2.;
@@ -515,15 +547,23 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                     array_stride: std::mem::size_of::<ParticleInstance>() as u64,
                     step_mode: VertexStepMode::Instance,
                     attributes: vec![
+                        // position and scale
                         VertexAttribute {
                             format: VertexFormat::Float32x4,
                             offset: 0,
                             shader_location: 3, // shader locations 0-2 are taken up by Position, Normal and UV attributes
                         },
+                        // base color
                         VertexAttribute {
                             format: VertexFormat::Float32x4,
                             offset: VertexFormat::Float32x4.size(),
                             shader_location: 4,
+                        },
+                        // emissive color
+                        VertexAttribute {
+                            format: VertexFormat::Float32x4,
+                            offset: 2 * VertexFormat::Float32x4.size(),
+                            shader_location: 5,
                         },
                     ],
                 }],

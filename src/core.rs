@@ -70,39 +70,23 @@ impl From<BlendMode> for u32 {
     }
 }
 
-#[derive(Component, Reflect, Clone, Debug, Serialize, Deserialize)]
-#[require(
-    ParticleSpawnerData,
-    Visibility,
-    Transform,
-    Mesh3d,
-    NoAutomaticBatching
-)]
-#[reflect(Component)]
-pub struct ParticleSpawner {
-    /// Determines the way this spawner creates particles over time
-    pub emission_mode: EmissionMode,
-    /// Shape on which to spawn particles
-    pub emission_shape: EmissionShape,
+#[derive(Reflect, Clone, Debug, Serialize, Deserialize)]
+pub struct ParticleSettings {
     /// Lifetime of a particle
     pub lifetime: RandF32,
-    /// Linear velocity applied to all particles at spawn
-    pub initial_velocity: RandVec3,
-    /// Velocity applied to all particles at spawn along radius from system origin
-    pub initial_velocity_radial: RandF32,
-    /// Whether to match the parent's velocity at spawn
-    pub inherit_parent_velocity: bool,
-    /// Initial scale of particles
-    pub initial_scale: RandF32,
     /// Evolution of scale over time, applied as a factor to initial scale. The curve should have
     /// domain [0,1]
     pub scale_curve: FireworkCurve<f32>,
+    /// Initial scale of particles
+    pub initial_scale: RandF32,
     /// Linear acceleration of particles
     pub acceleration: Vec3,
     /// Drag applied as a linear coefficient of velocity
     pub linear_drag: f32,
-    /// Color over lifetime
-    pub color: FireworkGradient<LinearRgba>,
+    /// Color over lifetime. If a texture is specified the final color will be multiplied.
+    pub base_color: FireworkGradient<LinearRgba>,
+    /// Emissive color over lifetime. If a texture is specified the final color will be multiplied.
+    pub emissive_color: FireworkGradient<LinearRgba>,
     /// Round out the particle with fading at the edges. If 0, no fading is applied. The value
     /// should be between 0 and 1.
     pub fade_edge: f32,
@@ -113,36 +97,84 @@ pub struct ParticleSpawner {
     pub blend_mode: BlendMode,
     /// Whether to use the PBR pipeline for the particle
     pub pbr: bool,
-    #[cfg(feature = "physics_avian")]
     /// If Some, particles will collide with the scene according to the provided parameters
     /// If None, no particle collision will occur.
+    #[cfg(feature = "physics_avian")]
     pub collision_settings: Option<ParticleCollisionSettings>,
+}
+
+#[derive(Reflect, Clone, Debug, Serialize, Deserialize)]
+pub struct EmissionSettings {
+    /// Which particle settings to use, as an index to the particle settings vector
+    pub particle_index: usize,
+    /// Determines the way this spawner creates particles over time
+    pub emission_mode: EmissionMode,
+    /// Shape on which to spawn particles
+    pub emission_shape: EmissionShape,
+    /// Linear velocity applied to all particles at spawn
+    pub initial_velocity: RandVec3,
+    /// Velocity applied to all particles at spawn along radius from system origin
+    pub initial_velocity_radial: RandF32,
+    /// Whether to match the parent's velocity at spawn
+    pub inherit_parent_velocity: bool,
+}
+
+#[derive(Component, Reflect, Clone, Debug, Serialize, Deserialize)]
+#[require(
+    ParticleSpawnerData,
+    Visibility,
+    Transform,
+    Mesh3d,
+    NoAutomaticBatching
+)]
+#[reflect(Component)]
+pub struct ParticleSpawner {
+    pub particle_settings: Vec<ParticleSettings>,
+    pub emission_settings: Vec<EmissionSettings>,
     /// Whether to initialize the spawner in an enabled state
     pub starts_enabled: bool,
     /// Determines how to compute the initial position of the spawned particles
     pub spawn_transform_mode: SpawnTransformMode,
 }
 
-impl Default for ParticleSpawner {
+impl Default for ParticleSettings {
     fn default() -> Self {
         Self {
-            emission_mode: EmissionMode::Rate(5.),
-            emission_shape: EmissionShape::Point,
             lifetime: RandF32::constant(5.),
-            initial_velocity: RandVec3::constant(Vec3::ZERO),
-            initial_velocity_radial: RandF32::constant(0.),
-            inherit_parent_velocity: true,
+            scale_curve: FireworkCurve::constant(1.),
             initial_scale: RandF32::constant(1.),
-            scale_curve: FireworkCurve::even_samples(vec![1.]),
             acceleration: Vec3::new(0., -9.81, 0.),
-            color: FireworkGradient::constant(LinearRgba::WHITE),
+            linear_drag: 0.2,
+            base_color: FireworkGradient::constant(LinearRgba::WHITE),
+            emissive_color: FireworkGradient::constant(LinearRgba::BLACK),
+            fade_edge: 0.7,
+            fade_scene: 1.,
             blend_mode: BlendMode::Blend,
-            linear_drag: 0.,
             pbr: false,
             #[cfg(feature = "physics_avian")]
             collision_settings: None,
-            fade_edge: 0.7,
-            fade_scene: 1.,
+        }
+    }
+}
+
+impl Default for EmissionSettings {
+    fn default() -> Self {
+        Self {
+            particle_index: 0,
+            emission_mode: EmissionMode::Rate(5.),
+            emission_shape: EmissionShape::Point,
+            initial_velocity: RandVec3::constant(Vec3::ZERO),
+            initial_velocity_radial: RandF32::constant(0.),
+            inherit_parent_velocity: true,
+        }
+    }
+}
+
+impl Default for ParticleSpawner {
+    fn default() -> Self {
+        Self {
+            particle_settings: vec![ParticleSettings::default()],
+            emission_settings: vec![EmissionSettings::default()],
             starts_enabled: true,
             spawn_transform_mode: default(),
         }
@@ -175,8 +207,8 @@ pub struct ParticleSpawnerData {
     // NOTE: This won't be needed once we have `Construct`
     pub initialized: bool,
     pub enabled: bool,
-    pub cooldown: Timer,
-    pub particles: Vec<ParticleData>,
+    pub cooldown: Vec<Timer>,
+    pub particles: Vec<Vec<ParticleData>>,
     pub parent_velocity: Vec3,
     /// Whether we have already sent an event about the particle system having finished
     pub finished_notified: bool,
@@ -199,7 +231,8 @@ pub struct ParticleData {
     pub scale: f32,
     pub age: f32,
     pub lifetime: f32,
-    pub color: LinearRgba,
+    pub base_color: LinearRgba,
+    pub emissive_color: LinearRgba,
     pub pbr: bool,
 }
 
@@ -225,11 +258,18 @@ pub fn sync_spawner_data(
     mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
 ) {
     for (settings, mut data) in &mut spawners {
-        if let EmissionMode::Rate(rate) = &settings.emission_mode {
-            data.cooldown
-                .set_duration(Duration::from_secs_f32(1. / rate));
-            data.cooldown.set_mode(TimerMode::Repeating);
-        }
+        data.cooldown = settings
+            .emission_settings
+            .iter()
+            .map(|emission_settings| {
+                if let EmissionMode::Rate(rate) = &emission_settings.emission_mode {
+                    Timer::new(Duration::from_secs_f32(1. / rate), TimerMode::Repeating)
+                } else {
+                    Timer::new(Duration::ZERO, TimerMode::Once)
+                }
+            })
+            .collect();
+        data.particles = vec![Vec::new(); settings.particle_settings.len()];
         if !data.initialized {
             data.enabled = settings.starts_enabled;
             data.initialized = true;
@@ -251,53 +291,60 @@ pub fn spawn_particles(
         &mut particle_systems_query
     {
         if data.enabled {
-            data.cooldown.tick(time.delta());
+            for i in 0..settings.emission_settings.len() {
+                let emission_settings = &settings.emission_settings[i];
+                let particle_settings =
+                    &settings.particle_settings[emission_settings.particle_index];
+                let cooldown = &mut data.cooldown[i];
+                cooldown.tick(time.delta());
 
-            let particles_to_spawn = match &settings.emission_mode {
-                EmissionMode::OneShot(count) => {
-                    data.enabled = false;
-                    *count
+                let particles_to_spawn = match &emission_settings.emission_mode {
+                    EmissionMode::OneShot(count) => {
+                        data.enabled = false;
+                        *count
+                    }
+                    EmissionMode::Rate(_) => cooldown.times_finished_this_tick() as usize,
+                    EmissionMode::OnDemand => {
+                        let count = data.manual_queued_count;
+                        data.manual_queued_count = 0;
+                        count
+                    }
+                };
+
+                let modifier = opt_modifier.cloned().unwrap_or_default();
+
+                let origin = match settings.spawn_transform_mode {
+                    SpawnTransformMode::Global => global_transform.compute_transform(),
+                    SpawnTransformMode::Local => *transform,
+                };
+
+                for _ in 0..particles_to_spawn {
+                    let spawn_offset = emission_settings.emission_shape.generate_point();
+
+                    let velocity = modifier.speed
+                        * (origin.rotation * emission_settings.initial_velocity.generate()
+                            + spawn_offset.normalize_or_zero()
+                                * emission_settings.initial_velocity_radial.generate())
+                        + if emission_settings.inherit_parent_velocity {
+                            data.parent_velocity
+                        } else {
+                            Vec3::ZERO
+                        };
+
+                    let initial_scale = particle_settings.initial_scale.generate() * modifier.scale;
+
+                    data.particles[emission_settings.particle_index].push(ParticleData {
+                        position: origin.translation + spawn_offset,
+                        lifetime: particle_settings.lifetime.generate(),
+                        initial_scale,
+                        scale: initial_scale,
+                        velocity,
+                        age: 0.,
+                        base_color: particle_settings.base_color.sample_clamped(0.),
+                        emissive_color: particle_settings.emissive_color.sample_clamped(0.),
+                        pbr: particle_settings.pbr,
+                    })
                 }
-                EmissionMode::Rate(_) => data.cooldown.times_finished_this_tick() as usize,
-                EmissionMode::OnDemand => {
-                    let count = data.manual_queued_count;
-                    data.manual_queued_count = 0;
-                    count
-                }
-            };
-
-            let modifier = opt_modifier.cloned().unwrap_or_default();
-
-            let origin = match settings.spawn_transform_mode {
-                SpawnTransformMode::Global => global_transform.compute_transform(),
-                SpawnTransformMode::Local => *transform,
-            };
-
-            for _ in 0..particles_to_spawn {
-                let spawn_offset = settings.emission_shape.generate_point();
-
-                let velocity = modifier.speed
-                    * (origin.rotation * settings.initial_velocity.generate()
-                        + spawn_offset.normalize_or_zero()
-                            * settings.initial_velocity_radial.generate())
-                    + if settings.inherit_parent_velocity {
-                        data.parent_velocity
-                    } else {
-                        Vec3::ZERO
-                    };
-
-                let initial_scale = settings.initial_scale.generate() * modifier.scale;
-
-                data.particles.push(ParticleData {
-                    position: origin.translation + spawn_offset,
-                    lifetime: settings.lifetime.generate(),
-                    initial_scale,
-                    scale: initial_scale,
-                    velocity,
-                    age: 0.,
-                    color: settings.color.sample_clamped(0.),
-                    pbr: settings.pbr,
-                })
             }
         }
     }
@@ -311,25 +358,28 @@ pub fn update_particles(
     particle_systems_query
         .par_iter_mut()
         .for_each(|(settings, mut data)| {
-            data.particles = data
-                .particles
-                .iter()
-                .filter_map(|particle| {
-                    let mut particle = *particle;
+            for i in 0..settings.particle_settings.len() {
+                let particle_settings = &settings.particle_settings[i];
+                data.particles[i] = data.particles[i]
+                    .iter()
+                    .filter_map(|particle| {
+                        let mut particle = *particle;
 
-                    particle.age += time.delta_secs();
-                    if particle.age >= particle.lifetime {
-                        return None;
-                    }
+                        particle.age += time.delta_secs();
+                        if particle.age >= particle.lifetime {
+                            return None;
+                        }
 
-                    let age_percent = particle.age / particle.lifetime;
-                    let scale_factor = settings.scale_curve.sample_clamped(age_percent);
+                        let age_percent = particle.age / particle.lifetime;
+                        let scale_factor =
+                            particle_settings.scale_curve.sample_clamped(age_percent);
 
-                    particle.scale = particle.initial_scale * scale_factor;
+                        particle.scale = particle.initial_scale * scale_factor;
 
-                    #[cfg(feature = "physics_avian")]
-                    let (new_pos, new_vel) =
-                        if let Some(collision_settigs) = &settings.collision_settings {
+                        #[cfg(feature = "physics_avian")]
+                        let (new_pos, new_vel) = if let Some(collision_settigs) =
+                            &particle_settings.collision_settings
+                        {
                             particle_collision(
                                 particle.position,
                                 particle.velocity,
@@ -343,22 +393,26 @@ pub fn update_particles(
                                 particle.velocity,
                             )
                         };
-                    #[cfg(not(feature = "physics_avian"))]
-                    let (new_pos, new_vel) = (
-                        particle.position + particle.velocity * time.delta_secs(),
-                        particle.velocity,
-                    );
+                        #[cfg(not(feature = "physics_avian"))]
+                        let (new_pos, new_vel) = (
+                            particle.position + particle.velocity * time.delta_secs(),
+                            particle.velocity,
+                        );
 
-                    particle.position = new_pos;
-                    particle.velocity = new_vel;
-                    particle.velocity += (settings.acceleration
-                        - particle.velocity * settings.linear_drag)
-                        * time.delta_secs();
-                    particle.color = settings.color.sample_clamped(age_percent);
+                        particle.position = new_pos;
+                        particle.velocity = new_vel;
+                        particle.velocity += (particle_settings.acceleration
+                            - particle.velocity * particle_settings.linear_drag)
+                            * time.delta_secs();
+                        particle.base_color =
+                            particle_settings.base_color.sample_clamped(age_percent);
+                        particle.emissive_color =
+                            particle_settings.emissive_color.sample_clamped(age_percent);
 
-                    Some(particle)
-                })
-                .collect();
+                        Some(particle)
+                    })
+                    .collect();
+            }
         });
 }
 
@@ -369,8 +423,11 @@ pub fn notify_finished_particle_spawners(
     mut particle_systems_query: Query<(Entity, &ParticleSpawner, &mut ParticleSpawnerData)>,
 ) {
     for (entity, settings, mut data) in &mut particle_systems_query {
-        if data.particles.is_empty()
-            && settings.emission_mode.is_one_shot()
+        if data.particles.iter().all(|i| i.is_empty())
+            && settings
+                .emission_settings
+                .iter()
+                .all(|e| e.emission_mode.is_one_shot())
             && !data.enabled
             && data.initialized
             && !data.finished_notified
