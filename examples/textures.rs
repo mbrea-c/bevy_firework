@@ -8,8 +8,8 @@ use bevy::{
 };
 use bevy_firework::{
     core::{
-        BlendMode, EmissionMode, EmissionSettings, ParticleCollisionSettings, ParticleSettings,
-        ParticleSpawner, SpawnTransformMode,
+        BlendMode, EmissionMode, EmissionPacing, EmissionSettings, ParticleCollisionSettings,
+        ParticleSettings, ParticleSpawner, SpawnTransformMode,
     },
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
@@ -23,7 +23,13 @@ fn main() {
 
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(Update, (adjust_time_scale, rotate_point_light));
+        .add_systems(
+            Update,
+            (
+                adjust_time_scale,
+                // rotate_point_light
+            ),
+        );
     app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
     app.run();
@@ -49,67 +55,110 @@ fn setup(
 
     commands.spawn((
         ParticleSpawner {
-            particle_settings: vec![ParticleSettings {
-                lifetime: RandF32::constant(5.),
-                scale_curve: FireworkCurve::constant(1.),
-                initial_scale: RandF32::constant(0.3),
-                linear_drag: 0.3,
-                angular_drag: 0.85,
-                base_color: FireworkGradient::uneven_samples(vec![
-                    (0., LinearRgba::WHITE),
-                    (0.9, LinearRgba::WHITE),
-                    (1., LinearRgba::WHITE.with_alpha(0.)),
-                ]),
-                base_color_texture: Some(asset_server.load_with_settings(
-                    "textures/9mm_case/diffuse.png",
-                    |settings: &mut ImageLoaderSettings| {
-                        settings.sampler = bevy::image::ImageSampler::Descriptor(
-                            ImageSamplerDescriptor::nearest(),
-                        );
-                    },
-                )),
-                normal_map_texture: Some(asset_server.load_with_settings(
-                    "textures/9mm_case/normal.png",
-                    |settings: &mut ImageLoaderSettings| {
-                        settings.is_srgb = false;
-                    },
-                )),
-                orm_texture: Some(asset_server.load_with_settings(
-                    "textures/9mm_case/orm.png",
-                    |settings: &mut ImageLoaderSettings| {
-                        settings.is_srgb = false;
-                    },
-                )),
-                emissive_color: FireworkGradient::constant(LinearRgba::BLACK),
-                fade_scene: 0.,
-                fade_edge: 0.,
-                blend_mode: BlendMode::Blend,
-                pbr: true,
-                collision_settings: Some(ParticleCollisionSettings {
-                    restitution: 0.4,
-                    friction: 0.35,
-                    filter: SpatialQueryFilter::default(),
-                }),
-                ..default()
-            }],
-            emission_settings: vec![EmissionSettings {
-                particle_index: 0,
-                emission_mode: EmissionMode::Rate(15.),
-                emission_shape: EmissionShape::Point,
-                initial_velocity: RandVec3 {
-                    magnitude: RandF32 { min: 5., max: 15. },
-                    direction: Vec3::Y,
-                    spread: 0.2,
+            particle_settings: vec![
+                ParticleSettings {
+                    lifetime: RandF32::constant(5.),
+                    scale_curve: FireworkCurve::constant(1.),
+                    initial_scale: RandF32::constant(0.3),
+                    linear_drag: 0.3,
+                    angular_drag: 0.85,
+                    base_color: FireworkGradient::uneven_samples(vec![
+                        (0., LinearRgba::WHITE),
+                        (0.9, LinearRgba::WHITE),
+                        (1., LinearRgba::WHITE.with_alpha(0.)),
+                    ]),
+                    base_color_texture: Some(asset_server.load_with_settings(
+                        "textures/bullet_case/diffuse.png",
+                        |settings: &mut ImageLoaderSettings| {
+                            settings.sampler = bevy::image::ImageSampler::Descriptor(
+                                ImageSamplerDescriptor::nearest(),
+                            );
+                        },
+                    )),
+                    normal_map_texture: Some(asset_server.load_with_settings(
+                        "textures/bullet_case/normal.png",
+                        |settings: &mut ImageLoaderSettings| {
+                            settings.is_srgb = false;
+                        },
+                    )),
+                    orm_texture: Some(asset_server.load_with_settings(
+                        "textures/bullet_case/orm.png",
+                        |settings: &mut ImageLoaderSettings| {
+                            settings.is_srgb = false;
+                        },
+                    )),
+                    emissive_color: FireworkGradient::uneven_samples(vec![
+                        (0., LinearRgba::rgb(50., 40., 0.)),
+                        (0.08, LinearRgba::rgb(30., 0., 0.)),
+                        (0.12, LinearRgba::BLACK),
+                    ]),
+                    fade_scene: 0.,
+                    fade_edge: 0.,
+                    blend_mode: BlendMode::Blend,
+                    pbr: true,
+                    collision_settings: Some(ParticleCollisionSettings {
+                        restitution: 0.4,
+                        friction: 0.35,
+                        filter: SpatialQueryFilter::default(),
+                    }),
+                    ..default()
                 },
-                initial_velocity_radial: RandF32::constant(0.),
-                inherit_parent_velocity: true,
-                initial_rotation: Quat::from_rotation_y(FRAC_PI_2),
-                initial_angular_velocity: RandVec3 {
-                    magnitude: RandF32 { min: 5., max: 15. },
-                    direction: -Vec3::Y,
-                    spread: 0.,
+                ParticleSettings {
+                    lifetime: RandF32::constant(2.),
+                    scale_curve: FireworkCurve::even_samples(vec![1., 2.]),
+                    initial_scale: RandF32 { min: 0.5, max: 0.8 },
+                    acceleration: Vec3::new(0., 0.3, 0.),
+                    linear_drag: 0.7,
+                    base_color: FireworkGradient::uneven_samples(vec![
+                        (0., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
+                        (0.1, LinearRgba::new(0.1, 0.1, 0.1, 0.15)),
+                        (1., LinearRgba::new(0.1, 0.1, 0.1, 0.0)),
+                    ]),
+                    base_color_texture: None,
+                    emissive_color: FireworkGradient::constant(LinearRgba::BLACK),
+                    fade_scene: 3.5,
+                    blend_mode: BlendMode::Blend,
+                    pbr: true,
+                    ..default()
                 },
-            }],
+            ],
+            emission_settings: vec![
+                EmissionSettings {
+                    particle_index: 0,
+                    emission_mode: EmissionMode::Global,
+                    emission_pacing: EmissionPacing::Rate(20.),
+                    emission_shape: EmissionShape::Point,
+                    initial_velocity: RandVec3 {
+                        magnitude: RandF32 { min: 5., max: 15. },
+                        direction: Vec3::Y,
+                        spread: 0.4,
+                    },
+                    initial_velocity_radial: RandF32::constant(0.),
+                    inherit_parent_velocity: true,
+                    initial_rotation: Quat::from_rotation_y(FRAC_PI_2),
+                    initial_angular_velocity: RandVec3 {
+                        magnitude: RandF32 { min: 5., max: 15. },
+                        direction: -Vec3::Y,
+                        spread: 0.,
+                    },
+                },
+                EmissionSettings {
+                    particle_index: 1,
+                    emission_mode: EmissionMode::Nested {
+                        target_particle: 0,
+                        emit_rate: 0.01,
+                        spawn_start: 0.,
+                        spawn_end: 0.1,
+                    },
+                    emission_pacing: EmissionPacing::Rate(15.),
+                    emission_shape: EmissionShape::Point,
+                    initial_velocity: RandVec3::constant(Vec3::ZERO),
+                    initial_velocity_radial: RandF32::constant(0.),
+                    inherit_parent_velocity: false,
+                    initial_rotation: Quat::IDENTITY,
+                    initial_angular_velocity: RandVec3::constant(Vec3::ZERO),
+                },
+            ],
             starts_enabled: true,
             spawn_transform_mode: SpawnTransformMode::Local,
         },
@@ -138,7 +187,7 @@ fn setup(
     // circular base
     commands.spawn((
         Mesh3d(meshes.add(Cylinder::new(4., 0.2).mesh().resolution(64))),
-        MeshMaterial3d(materials.add(Color::from(LinearRgba::rgb(0.1, 0.1, 0.1)))),
+        MeshMaterial3d(materials.add(Color::from(LinearRgba::rgb(0.3, 0.1, 0.1)))),
         Transform::IDENTITY,
         Collider::cylinder(4., 0.2),
     ));
@@ -161,7 +210,7 @@ fn setup(
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(4.0, 4.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 
     // camera

@@ -12,7 +12,7 @@ use avian3d::prelude::*;
 pub const DEFAULT_MESH: Handle<Mesh> = weak_handle!("ba671aee-04f4-485d-9d1e-ad7053dacfab");
 
 #[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
-pub enum EmissionMode {
+pub enum EmissionPacing {
     /// Number of particles emitted at once
     OneShot(usize),
     /// Rate of particles per second
@@ -21,9 +21,26 @@ pub enum EmissionMode {
     OnDemand,
 }
 
-impl EmissionMode {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
+pub enum EmissionMode {
+    #[default]
+    Global,
+    Nested {
+        /// The particle settings index of the particle we will be spawning under
+        target_particle: usize,
+        /// How many particles should be emitted over the lifetime of the target particle. This
+        /// number will be pro-rated if spawn_start and spawn_end aren't 0. and 1. respectively.
+        emit_rate: f32,
+        /// Percentage of lifetime of target particle when emission should start
+        spawn_start: f32,
+        /// Percentage of lifetime of target particle when emission should end
+        spawn_end: f32,
+    },
+}
+
+impl EmissionPacing {
     pub fn is_one_shot(&self) -> bool {
-        matches!(self, EmissionMode::OneShot(_))
+        matches!(self, EmissionPacing::OneShot(_))
     }
 }
 
@@ -118,6 +135,8 @@ pub struct EmissionSettings {
     /// Which particle settings to use, as an index to the particle settings vector
     pub particle_index: usize,
     /// Determines the way this spawner creates particles over time
+    pub emission_pacing: EmissionPacing,
+    /// Determines where to spawn the particle and what velocity/rotation/position to inherit
     pub emission_mode: EmissionMode,
     /// Shape on which to spawn particles
     pub emission_shape: EmissionShape,
@@ -178,7 +197,8 @@ impl Default for EmissionSettings {
     fn default() -> Self {
         Self {
             particle_index: 0,
-            emission_mode: EmissionMode::Rate(5.),
+            emission_mode: EmissionMode::default(),
+            emission_pacing: EmissionPacing::Rate(5.),
             emission_shape: EmissionShape::Point,
             initial_velocity: RandVec3::constant(Vec3::ZERO),
             initial_velocity_radial: RandF32::constant(0.),
@@ -241,7 +261,7 @@ impl ParticleSpawnerData {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ParticleData {
     pub position: Vec3,
     pub velocity: Vec3,
@@ -255,6 +275,8 @@ pub struct ParticleData {
     pub base_color: LinearRgba,
     pub emissive_color: LinearRgba,
     pub pbr: bool,
+    /// Percentage through our lifetime when the last subparticle was emitted
+    pub last_emitted_lifetime: Vec<f32>,
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -283,7 +305,7 @@ pub fn sync_spawner_data(
             .emission_settings
             .iter()
             .map(|emission_settings| {
-                if let EmissionMode::Rate(rate) = &emission_settings.emission_mode {
+                if let EmissionPacing::Rate(rate) = &emission_settings.emission_pacing {
                     Timer::new(Duration::from_secs_f32(1. / rate), TimerMode::Repeating)
                 } else {
                     Timer::new(Duration::ZERO, TimerMode::Once)
@@ -316,57 +338,136 @@ pub fn spawn_particles(
                 let emission_settings = &settings.emission_settings[i];
                 let particle_settings =
                     &settings.particle_settings[emission_settings.particle_index];
-                let cooldown = &mut data.cooldown[i];
-                cooldown.tick(time.delta());
 
-                let particles_to_spawn = match &emission_settings.emission_mode {
-                    EmissionMode::OneShot(count) => {
-                        data.enabled = false;
-                        *count
-                    }
-                    EmissionMode::Rate(_) => cooldown.times_finished_this_tick() as usize,
-                    EmissionMode::OnDemand => {
-                        let count = data.manual_queued_count;
-                        data.manual_queued_count = 0;
-                        count
-                    }
-                };
+                match emission_settings.emission_mode {
+                    EmissionMode::Global => {
+                        let cooldown = &mut data.cooldown[i];
+                        cooldown.tick(time.delta());
 
-                let modifier = opt_modifier.cloned().unwrap_or_default();
-
-                let origin = match settings.spawn_transform_mode {
-                    SpawnTransformMode::Global => global_transform.compute_transform(),
-                    SpawnTransformMode::Local => *transform,
-                };
-
-                for _ in 0..particles_to_spawn {
-                    let spawn_offset = emission_settings.emission_shape.generate_point();
-
-                    let velocity = modifier.speed
-                        * (origin.rotation * emission_settings.initial_velocity.generate()
-                            + spawn_offset.normalize_or_zero()
-                                * emission_settings.initial_velocity_radial.generate())
-                        + if emission_settings.inherit_parent_velocity {
-                            data.parent_velocity
-                        } else {
-                            Vec3::ZERO
+                        let particles_to_spawn = match &emission_settings.emission_pacing {
+                            EmissionPacing::OneShot(count) => {
+                                data.enabled = false;
+                                *count
+                            }
+                            EmissionPacing::Rate(_) => cooldown.times_finished_this_tick() as usize,
+                            EmissionPacing::OnDemand => {
+                                let count = data.manual_queued_count;
+                                data.manual_queued_count = 0;
+                                count
+                            }
                         };
 
-                    let initial_scale = particle_settings.initial_scale.generate() * modifier.scale;
+                        let modifier = opt_modifier.cloned().unwrap_or_default();
 
-                    data.particles[emission_settings.particle_index].push(ParticleData {
-                        position: origin.translation + spawn_offset,
-                        lifetime: particle_settings.lifetime.generate(),
-                        initial_scale,
-                        scale: initial_scale,
-                        velocity,
-                        age: 0.,
-                        base_color: particle_settings.base_color.sample_clamped(0.),
-                        emissive_color: particle_settings.emissive_color.sample_clamped(0.),
-                        pbr: particle_settings.pbr,
-                        rotation: emission_settings.initial_rotation,
-                        angular_velocity: emission_settings.initial_angular_velocity.generate(),
-                    })
+                        let origin = match settings.spawn_transform_mode {
+                            SpawnTransformMode::Global => global_transform.compute_transform(),
+                            SpawnTransformMode::Local => *transform,
+                        };
+
+                        for _ in 0..particles_to_spawn {
+                            let spawn_offset = emission_settings.emission_shape.generate_point();
+
+                            let velocity = modifier.speed
+                                * (origin.rotation * emission_settings.initial_velocity.generate()
+                                    + spawn_offset.normalize_or_zero()
+                                        * emission_settings.initial_velocity_radial.generate())
+                                + if emission_settings.inherit_parent_velocity {
+                                    data.parent_velocity
+                                } else {
+                                    Vec3::ZERO
+                                };
+
+                            let initial_scale =
+                                particle_settings.initial_scale.generate() * modifier.scale;
+
+                            data.particles[emission_settings.particle_index].push(ParticleData {
+                                position: origin.translation + spawn_offset,
+                                lifetime: particle_settings.lifetime.generate(),
+                                initial_scale,
+                                scale: initial_scale,
+                                velocity,
+                                age: 0.,
+                                base_color: particle_settings.base_color.sample_clamped(0.),
+                                emissive_color: particle_settings.emissive_color.sample_clamped(0.),
+                                pbr: particle_settings.pbr,
+                                rotation: emission_settings.initial_rotation,
+                                angular_velocity: emission_settings
+                                    .initial_angular_velocity
+                                    .generate(),
+                                last_emitted_lifetime: vec![
+                                    f32::MIN;
+                                    settings.emission_settings.len()
+                                ],
+                            })
+                        }
+                    }
+                    EmissionMode::Nested {
+                        target_particle,
+                        emit_rate,
+                        spawn_start,
+                        spawn_end,
+                    } => {
+                        let modifier = opt_modifier.cloned().unwrap_or_default();
+
+                        for p_i in 0..data.particles[target_particle].len() {
+                            let other_particle = &mut data.particles[target_particle][p_i];
+                            let percent_passed = other_particle.age / other_particle.lifetime;
+                            let time_passed = percent_passed.min(spawn_end)
+                                - other_particle.last_emitted_lifetime[i].max(spawn_start);
+                            let times_needed_to_emit = time_passed.div_euclid(emit_rate);
+                            let times_needed_to_emit_usize = times_needed_to_emit as usize;
+                            let last_emission = other_particle.last_emitted_lifetime[i]
+                                .max(spawn_start)
+                                + times_needed_to_emit * emit_rate;
+                            other_particle.last_emitted_lifetime[i] = last_emission;
+
+                            let origin_position = other_particle.position;
+                            let origin_rotation = other_particle.rotation;
+                            let origin_velocity = other_particle.velocity;
+
+                            for _ in 0..times_needed_to_emit_usize {
+                                let spawn_offset =
+                                    emission_settings.emission_shape.generate_point();
+                                let velocity = modifier.speed
+                                    * (origin_rotation
+                                        * emission_settings.initial_velocity.generate()
+                                        + spawn_offset.normalize_or_zero()
+                                            * emission_settings.initial_velocity_radial.generate())
+                                    + if emission_settings.inherit_parent_velocity {
+                                        origin_velocity
+                                    } else {
+                                        Vec3::ZERO
+                                    };
+                                let initial_scale =
+                                    particle_settings.initial_scale.generate() * modifier.scale;
+                                let initial_position = origin_position + spawn_offset;
+
+                                data.particles[emission_settings.particle_index].push(
+                                    ParticleData {
+                                        position: initial_position,
+                                        lifetime: particle_settings.lifetime.generate(),
+                                        initial_scale,
+                                        scale: initial_scale,
+                                        velocity,
+                                        age: 0.,
+                                        base_color: particle_settings.base_color.sample_clamped(0.),
+                                        emissive_color: particle_settings
+                                            .emissive_color
+                                            .sample_clamped(0.),
+                                        pbr: particle_settings.pbr,
+                                        rotation: emission_settings.initial_rotation,
+                                        angular_velocity: emission_settings
+                                            .initial_angular_velocity
+                                            .generate(),
+                                        last_emitted_lifetime: vec![
+                                            f32::MIN;
+                                            settings.emission_settings.len()
+                                        ],
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -386,7 +487,7 @@ pub fn update_particles(
                 data.particles[i] = data.particles[i]
                     .iter()
                     .filter_map(|particle| {
-                        let mut particle = *particle;
+                        let mut particle = particle.clone();
 
                         particle.age += time.delta_secs();
                         if particle.age >= particle.lifetime {
@@ -459,7 +560,7 @@ pub fn notify_finished_particle_spawners(
             && settings
                 .emission_settings
                 .iter()
-                .all(|e| e.emission_mode.is_one_shot())
+                .all(|e| e.emission_pacing.is_one_shot())
             && !data.enabled
             && data.initialized
             && !data.finished_notified
