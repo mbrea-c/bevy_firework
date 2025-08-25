@@ -70,7 +70,7 @@ impl From<BlendMode> for u32 {
     }
 }
 
-#[derive(Reflect, Clone, Debug, Serialize, Deserialize)]
+#[derive(Reflect, Clone, Debug)]
 pub struct ParticleSettings {
     /// Lifetime of a particle
     pub lifetime: RandF32,
@@ -81,12 +81,22 @@ pub struct ParticleSettings {
     pub initial_scale: RandF32,
     /// Linear acceleration of particles
     pub acceleration: Vec3,
+    /// Angular acceleration of particles
+    pub angular_acceleration: Vec3,
     /// Drag applied as a linear coefficient of velocity
     pub linear_drag: f32,
+    /// Angular drag applied as a linear coefficient of angular velocity
+    pub angular_drag: f32,
     /// Color over lifetime. If a texture is specified the final color will be multiplied.
     pub base_color: FireworkGradient<LinearRgba>,
+    pub base_color_texture: Option<Handle<Image>>,
     /// Emissive color over lifetime. If a texture is specified the final color will be multiplied.
     pub emissive_color: FireworkGradient<LinearRgba>,
+    pub normal_map_texture: Option<Handle<Image>>,
+    /// Occlusion/Roughness/Metallic texture; that is, a texture where the red, green and blue channels
+    /// represent the material's occlusion, perceptual roughness and "metallic" setting,
+    /// respectively. The occlusion value is currently ignored.
+    pub orm_texture: Option<Handle<Image>>,
     /// Round out the particle with fading at the edges. If 0, no fading is applied. The value
     /// should be between 0 and 1.
     pub fade_edge: f32,
@@ -103,7 +113,7 @@ pub struct ParticleSettings {
     pub collision_settings: Option<ParticleCollisionSettings>,
 }
 
-#[derive(Reflect, Clone, Debug, Serialize, Deserialize)]
+#[derive(Reflect, Clone, Debug)]
 pub struct EmissionSettings {
     /// Which particle settings to use, as an index to the particle settings vector
     pub particle_index: usize,
@@ -117,9 +127,11 @@ pub struct EmissionSettings {
     pub initial_velocity_radial: RandF32,
     /// Whether to match the parent's velocity at spawn
     pub inherit_parent_velocity: bool,
+    pub initial_rotation: Quat,
+    pub initial_angular_velocity: RandVec3,
 }
 
-#[derive(Component, Reflect, Clone, Debug, Serialize, Deserialize)]
+#[derive(Component, Reflect, Clone, Debug)]
 #[require(
     ParticleSpawnerData,
     Visibility,
@@ -144,9 +156,14 @@ impl Default for ParticleSettings {
             scale_curve: FireworkCurve::constant(1.),
             initial_scale: RandF32::constant(1.),
             acceleration: Vec3::new(0., -9.81, 0.),
+            angular_acceleration: Vec3::ZERO,
             linear_drag: 0.2,
+            angular_drag: 0.2,
             base_color: FireworkGradient::constant(LinearRgba::WHITE),
+            base_color_texture: None,
             emissive_color: FireworkGradient::constant(LinearRgba::BLACK),
+            normal_map_texture: None,
+            orm_texture: None,
             fade_edge: 0.7,
             fade_scene: 1.,
             blend_mode: BlendMode::Blend,
@@ -166,6 +183,8 @@ impl Default for EmissionSettings {
             initial_velocity: RandVec3::constant(Vec3::ZERO),
             initial_velocity_radial: RandF32::constant(0.),
             inherit_parent_velocity: true,
+            initial_rotation: Quat::IDENTITY,
+            initial_angular_velocity: RandVec3::constant(Vec3::ZERO),
         }
     }
 }
@@ -226,6 +245,8 @@ impl ParticleSpawnerData {
 pub struct ParticleData {
     pub position: Vec3,
     pub velocity: Vec3,
+    pub rotation: Quat,
+    pub angular_velocity: Vec3,
     // Needs to be stored for updating the scale via curves
     pub initial_scale: f32,
     pub scale: f32,
@@ -343,6 +364,8 @@ pub fn spawn_particles(
                         base_color: particle_settings.base_color.sample_clamped(0.),
                         emissive_color: particle_settings.emissive_color.sample_clamped(0.),
                         pbr: particle_settings.pbr,
+                        rotation: emission_settings.initial_rotation,
+                        angular_velocity: emission_settings.initial_angular_velocity.generate(),
                     })
                 }
             }
@@ -401,9 +424,18 @@ pub fn update_particles(
 
                         particle.position = new_pos;
                         particle.velocity = new_vel;
+
                         particle.velocity += (particle_settings.acceleration
                             - particle.velocity * particle_settings.linear_drag)
                             * time.delta_secs();
+
+                        particle.rotation =
+                            Quat::from_scaled_axis(particle.angular_velocity * time.delta_secs())
+                                * particle.rotation;
+                        particle.angular_velocity += (particle_settings.angular_acceleration
+                            - particle_settings.angular_drag * particle.angular_velocity)
+                            * time.delta_secs();
+
                         particle.base_color =
                             particle_settings.base_color.sample_clamped(age_percent);
                         particle.emissive_color =

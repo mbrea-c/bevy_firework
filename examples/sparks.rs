@@ -1,6 +1,6 @@
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
-    core::{BlendMode, EmissionMode, ParticleSpawner},
+    core::{BlendMode, EmissionPacing, ParticleSpawner},
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
@@ -47,7 +47,7 @@ fn setup(
     ));
     commands.spawn((
         ParticleSpawner {
-            emission_mode: EmissionMode::Rate(1000.),
+            emission_mode: EmissionPacing::Rate(1000.),
             emission_shape: EmissionShape::Circle {
                 normal: Vec3::Y,
                 radius: 0.3,
