@@ -2,7 +2,7 @@ use avian3d::prelude::*;
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
     core::{
-        BlendMode, EmissionMode, EmissionSettings, ParticleCollisionSettings, ParticleSettings,
+        BlendMode, EmissionPacing, EmissionSettings, ParticleCollisionSettings, ParticleSettings,
         ParticleSpawner,
     },
     curve::{FireworkCurve, FireworkGradient},
@@ -76,7 +76,7 @@ fn setup(
             }],
             emission_settings: vec![EmissionSettings {
                 particle_index: 0,
-                emission_mode: EmissionMode::Rate(100.),
+                emission_pacing: EmissionPacing::Rate(100.),
                 emission_shape: EmissionShape::Circle {
                     normal: Vec3::Y,
                     radius: 0.3,
