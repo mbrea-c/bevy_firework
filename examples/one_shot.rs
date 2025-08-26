@@ -8,7 +8,8 @@ use bevy::{
 };
 use bevy_firework::{
     core::{
-        BlendMode, EmissionPacing, ParticleSpawner, ParticleSpawnerFinished, SpawnTransformMode,
+        BlendMode, EmissionPacing, EmissionSettings, ParticleSettings, ParticleSpawner,
+        ParticleSpawnerFinished, SpawnTransformMode,
     },
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
@@ -99,34 +100,40 @@ fn setup(
                         commands
                             .spawn((
                                 ParticleSpawner {
-                                    emission_mode: EmissionPacing::OneShot(20),
-                                    emission_shape: EmissionShape::Circle {
-                                        normal: Vec3::Y,
-                                        radius: 0.4,
-                                    },
-                                    lifetime: RandF32::constant(2.5),
-                                    inherit_parent_velocity: true,
-                                    initial_velocity: RandVec3 {
-                                        direction: Vec3::Y,
-                                        magnitude: RandF32 { min: 0., max: 2. },
-                                        spread: 0.,
-                                    },
-                                    initial_velocity_radial: RandF32 { min: 0., max: 2.5 },
-                                    initial_scale: RandF32 {
-                                        min: (impulse / 10. - 0.1).max(0.),
-                                        max: (impulse / 10. + 0.1).min(1.),
-                                    },
-                                    scale_curve: FireworkCurve::even_samples(vec![1., 2.]),
-                                    color: FireworkGradient::uneven_samples(vec![
-                                        (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
-                                        (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
-                                        (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
-                                    ]),
-                                    blend_mode: BlendMode::Blend,
-                                    linear_drag: 0.7,
-                                    pbr: true,
-                                    acceleration: Vec3::new(0., -1.5, 0.),
-                                    fade_scene: 3.5,
+                                    particle_settings: vec![ParticleSettings {
+                                        lifetime: RandF32::constant(2.5),
+                                        initial_scale: RandF32 {
+                                            min: (impulse / 10. - 0.1).max(0.),
+                                            max: (impulse / 10. + 0.1).min(1.),
+                                        },
+                                        scale_curve: FireworkCurve::even_samples(vec![1., 2.]),
+                                        base_color: FireworkGradient::uneven_samples(vec![
+                                            (0., LinearRgba::new(0.6, 0.3, 0., 0.)),
+                                            (0.1, LinearRgba::new(0.6, 0.3, 0., 0.35)),
+                                            (1., LinearRgba::new(0.6, 0.3, 0., 0.0)),
+                                        ]),
+                                        blend_mode: BlendMode::Blend,
+                                        linear_drag: 0.7,
+                                        pbr: true,
+                                        acceleration: Vec3::new(0., -1.5, 0.),
+                                        fade_scene: 3.5,
+                                        ..default()
+                                    }],
+                                    emission_settings: vec![EmissionSettings {
+                                        emission_pacing: EmissionPacing::OneShot(20),
+                                        emission_shape: EmissionShape::Circle {
+                                            normal: Vec3::Y,
+                                            radius: 0.4,
+                                        },
+                                        inherit_parent_velocity: true,
+                                        initial_velocity: RandVec3 {
+                                            direction: Vec3::Y,
+                                            magnitude: RandF32 { min: 0., max: 2. },
+                                            spread: 0.,
+                                        },
+                                        initial_velocity_radial: RandF32 { min: 0., max: 2.5 },
+                                        ..default()
+                                    }],
                                     spawn_transform_mode: SpawnTransformMode::Local,
                                     ..default()
                                 },

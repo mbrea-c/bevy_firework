@@ -6,7 +6,8 @@ use bevy::{
 };
 use bevy_firework::{
     core::{
-        BlendMode, EmissionPacing, ParticleCollisionSettings, ParticleSpawner, ParticleSpawnerData,
+        BlendMode, EmissionPacing, EmissionSettings, ParticleCollisionSettings, ParticleSettings,
+        ParticleSpawner, ParticleSpawnerData,
     },
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
@@ -88,38 +89,44 @@ fn setup(
 
     commands.spawn((
         ParticleSpawner {
-            emission_mode: EmissionPacing::Rate(80000.),
-            emission_shape: EmissionShape::Circle {
-                normal: Vec3::Y,
-                radius: 0.3,
-            },
-            lifetime: RandF32::constant(2.0),
-            initial_velocity: RandVec3 {
-                magnitude: RandF32 { min: 6., max: 8. },
-                direction: Vec3::Y,
-                spread: 30. / 180. * PI,
-            },
-            inherit_parent_velocity: true,
-            initial_scale: RandF32 {
-                min: 0.02,
-                max: 0.08,
-            },
-            scale_curve: FireworkCurve::constant(1.),
-            linear_drag: 0.15,
-            color: FireworkGradient::uneven_samples(vec![
-                (0., LinearRgba::new(100., 70., 10., 1.)),
-                (0.7, LinearRgba::new(3., 1., 1., 1.)),
-                (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
-                (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
-                (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
-            ]),
-            blend_mode: BlendMode::Blend,
-            pbr: true,
-            collision_settings: Some(ParticleCollisionSettings {
-                restitution: 0.6,
-                friction: 0.2,
-                filter: SpatialQueryFilter::default(),
-            }),
+            particle_settings: vec![ParticleSettings {
+                lifetime: RandF32::constant(2.0),
+                initial_scale: RandF32 {
+                    min: 0.02,
+                    max: 0.08,
+                },
+                scale_curve: FireworkCurve::constant(1.),
+                linear_drag: 0.15,
+                base_color: FireworkGradient::uneven_samples(vec![
+                    (0., LinearRgba::new(100., 70., 10., 1.)),
+                    (0.7, LinearRgba::new(3., 1., 1., 1.)),
+                    (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
+                    (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
+                    (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
+                ]),
+                blend_mode: BlendMode::Blend,
+                pbr: false,
+                collision_settings: Some(ParticleCollisionSettings {
+                    restitution: 0.6,
+                    friction: 0.2,
+                    filter: SpatialQueryFilter::default(),
+                }),
+                ..default()
+            }],
+            emission_settings: vec![EmissionSettings {
+                emission_pacing: EmissionPacing::Rate(80000.),
+                emission_shape: EmissionShape::Circle {
+                    normal: Vec3::Y,
+                    radius: 0.3,
+                },
+                initial_velocity: RandVec3 {
+                    magnitude: RandF32 { min: 6., max: 8. },
+                    direction: Vec3::Y,
+                    spread: 30. / 180. * PI,
+                },
+                inherit_parent_velocity: true,
+                ..default()
+            }],
             ..default()
         },
         Transform {
@@ -211,10 +218,10 @@ fn update_particle_counts(
 
     for (settings, data) in &particle_systems {
         debug_info.particle_system_count += 1;
-        if settings.collision_settings.is_some() {
-            debug_info.particle_count_collision += data.particles.len();
+        if settings.particle_settings[0].collision_settings.is_some() {
+            debug_info.particle_count_collision += data.particles.get(0).map_or(0, |p| p.len());
         } else {
-            debug_info.particle_count_no_collision += data.particles.len();
+            debug_info.particle_count_no_collision += data.particles.get(0).map_or(0, |p| p.len());
         }
     }
 }

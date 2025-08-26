@@ -23,13 +23,7 @@ fn main() {
 
     app.add_plugins(ParticleSystemPlugin::default())
         .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (
-                adjust_time_scale,
-                // rotate_point_light
-            ),
-        );
+        .add_systems(Update, adjust_time_scale);
     app.add_plugins(avian3d::prelude::PhysicsPlugins::default());
 
     app.run();
@@ -87,11 +81,7 @@ fn setup(
                             settings.is_srgb = false;
                         },
                     )),
-                    emissive_color: FireworkGradient::uneven_samples(vec![
-                        (0., LinearRgba::rgb(50., 40., 0.)),
-                        (0.08, LinearRgba::rgb(30., 0., 0.)),
-                        (0.12, LinearRgba::BLACK),
-                    ]),
+                    emissive_color: FireworkGradient::constant(LinearRgba::BLACK),
                     fade_scene: 0.,
                     fade_edge: 0.,
                     blend_mode: BlendMode::Blend,
@@ -126,7 +116,7 @@ fn setup(
                 EmissionSettings {
                     particle_index: 0,
                     emission_mode: EmissionMode::Global,
-                    emission_pacing: EmissionPacing::Rate(20.),
+                    emission_pacing: EmissionPacing::Rate(12.),
                     emission_shape: EmissionShape::Point,
                     initial_velocity: RandVec3 {
                         magnitude: RandF32 { min: 5., max: 15. },
@@ -228,20 +218,6 @@ fn setup(
         #[cfg(target_arch = "wasm32")]
         Msaa::Off,
     ));
-}
-
-fn rotate_point_light(
-    mut point_lights: Query<&mut Transform, With<DirectionalLight>>,
-    time: Res<Time>,
-) {
-    for mut transform in &mut point_lights {
-        transform.translation = Vec3::new(
-            3. * time.elapsed_secs().sin(),
-            2. + 4. * ((time.elapsed_secs() * 0.78932).sin() + 1.) / 2.,
-            3. * time.elapsed_secs().cos(),
-        );
-        transform.look_at(Vec3::ZERO, Vec3::Y);
-    }
 }
 
 fn adjust_time_scale(

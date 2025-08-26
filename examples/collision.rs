@@ -62,8 +62,8 @@ fn setup(
                 emissive_color: FireworkGradient::uneven_samples(vec![
                     (0., LinearRgba::new(30., 21., 1., 1.)),
                     (0.7, LinearRgba::new(3., 1., 1., 1.)),
-                    (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
-                    (0.9, LinearRgba::new(0., 0., 0., 1.)),
+                    (0.75, LinearRgba::new(1., 0.3, 0.3, 1.)),
+                    (0.8, LinearRgba::new(0., 0., 0., 1.)),
                 ]),
                 blend_mode: BlendMode::Blend,
                 pbr: true,

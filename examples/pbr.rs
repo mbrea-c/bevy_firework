@@ -68,15 +68,16 @@ fn setup(
                 ..default()
             }],
             emission_settings: vec![EmissionSettings {
-                particle_to_emit: 0,
+                particle_index: 0,
                 emission_pacing: EmissionPacing::Rate(150.),
-                emission_source: EmissionShape::Circle {
+                emission_shape: EmissionShape::Circle {
                     normal: Vec3::Y,
                     radius: 3.5,
                 },
                 initial_velocity: RandVec3::constant(Vec3::ZERO),
                 initial_velocity_radial: RandF32::constant(0.),
                 inherit_parent_velocity: true,
+                ..default()
             }],
             ..default()
         },

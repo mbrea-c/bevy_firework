@@ -5,7 +5,10 @@
 
 use bevy::{core_pipeline::bloom::Bloom, prelude::*};
 use bevy_firework::{
-    core::{BlendMode, EmissionPacing, ParticleSpawner, ParticleSpawnerData},
+    core::{
+        BlendMode, EmissionPacing, EmissionSettings, ParticleSettings, ParticleSpawner,
+        ParticleSpawnerData,
+    },
     curve::{FireworkCurve, FireworkGradient},
     emission_shape::EmissionShape,
     plugin::ParticleSystemPlugin,
@@ -53,33 +56,40 @@ fn setup(
 
     commands.spawn((
         ParticleSpawner {
-            emission_mode: EmissionPacing::OnDemand,
-            emission_shape: EmissionShape::Circle {
-                normal: Vec3::Y,
-                radius: 0.3,
-            },
-            lifetime: RandF32::constant(0.75),
-            inherit_parent_velocity: true,
-            initial_velocity: RandVec3 {
-                magnitude: RandF32 { min: 0., max: 10. },
-                direction: Vec3::Y,
-                spread: 30. / 180. * PI,
-            },
-            initial_scale: RandF32 {
-                min: 0.02,
-                max: 0.08,
-            },
-            scale_curve: FireworkCurve::constant(1.),
-            color: FireworkGradient::uneven_samples(vec![
-                (0., LinearRgba::new(150., 100., 15., 1.)),
-                (0.7, LinearRgba::new(3., 1., 1., 1.)),
-                (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
-                (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
-                (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
-            ]),
-            blend_mode: BlendMode::Blend,
-            linear_drag: 0.1,
-            pbr: false,
+            particle_settings: vec![ParticleSettings {
+                scale_curve: FireworkCurve::constant(1.),
+                base_color: FireworkGradient::uneven_samples(vec![
+                    (0., LinearRgba::new(150., 100., 15., 1.)),
+                    (0.7, LinearRgba::new(3., 1., 1., 1.)),
+                    (0.8, LinearRgba::new(1., 0.3, 0.3, 1.)),
+                    (0.9, LinearRgba::new(0.3, 0.3, 0.3, 1.)),
+                    (1., LinearRgba::new(0.1, 0.1, 0.1, 0.)),
+                ]),
+                blend_mode: BlendMode::Blend,
+                linear_drag: 0.1,
+                pbr: false,
+                initial_scale: RandF32 {
+                    min: 0.02,
+                    max: 0.08,
+                },
+                lifetime: RandF32::constant(0.75),
+                ..default()
+            }],
+            emission_settings: vec![EmissionSettings {
+                particle_index: 0,
+                emission_pacing: EmissionPacing::OnDemand,
+                emission_shape: EmissionShape::Circle {
+                    normal: Vec3::Y,
+                    radius: 0.3,
+                },
+                inherit_parent_velocity: true,
+                initial_velocity: RandVec3 {
+                    magnitude: RandF32 { min: 0., max: 10. },
+                    direction: Vec3::Y,
+                    spread: 30. / 180. * PI,
+                },
+                ..default()
+            }],
             ..default()
         },
         Transform::from_xyz(0., 0.1, 0.),
