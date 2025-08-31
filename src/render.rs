@@ -516,63 +516,63 @@ fn queue_custom(
         for (entity, main_entity, particle_material_data, render_layers_entity) in
             &particle_materials
         {
+            let render_layers_view = render_layers.unwrap_or_default();
+            let render_layers_entity = render_layers_entity.unwrap_or_default();
+            if !render_layers_view.intersects(render_layers_entity) {
+                continue;
+            }
+
             let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
             else {
                 continue;
             };
-            // check if same view layer else continue
-            let render_layers_view = render_layers.unwrap_or_default();
-            let render_layers_entity = render_layers_entity.unwrap_or_default();
-
-            if render_layers_view.intersects(render_layers_entity) {
-                let mut key = view_key
-                    | MeshPipelineKey::from_primitive_topology(PrimitiveTopology::TriangleList);
-                //key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
-                match particle_material_data.alpha_mode {
-                    AlphaMode::Blend => {
-                        key |= MeshPipelineKey::BLEND_ALPHA;
-                    }
-                    AlphaMode::Premultiplied | AlphaMode::Add => {
-                        // Premultiplied and Add share the same pipeline key
-                        // They're made distinct in the PBR shader, via `premultiply_alpha()`
-                        key |= MeshPipelineKey::BLEND_PREMULTIPLIED_ALPHA;
-                    }
-                    AlphaMode::Multiply => {
-                        key |= MeshPipelineKey::BLEND_MULTIPLY;
-                    }
-                    AlphaMode::Mask(_) => {
-                        key |= MeshPipelineKey::MAY_DISCARD;
-                    }
-                    _ => (),
-                };
-
-                if normal_prepass {
-                    key |= MeshPipelineKey::NORMAL_PREPASS;
+            let mut key = view_key
+                | MeshPipelineKey::from_primitive_topology(PrimitiveTopology::TriangleList);
+            //key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
+            match particle_material_data.alpha_mode {
+                AlphaMode::Blend => {
+                    key |= MeshPipelineKey::BLEND_ALPHA;
                 }
-
-                if depth_prepass {
-                    key |= MeshPipelineKey::DEPTH_PREPASS;
+                AlphaMode::Premultiplied | AlphaMode::Add => {
+                    // Premultiplied and Add share the same pipeline key
+                    // They're made distinct in the PBR shader, via `premultiply_alpha()`
+                    key |= MeshPipelineKey::BLEND_PREMULTIPLIED_ALPHA;
                 }
-
-                if motion_vector_prepass {
-                    key |= MeshPipelineKey::MOTION_VECTOR_PREPASS;
+                AlphaMode::Multiply => {
+                    key |= MeshPipelineKey::BLEND_MULTIPLY;
                 }
-
-                if deferred_prepass {
-                    key |= MeshPipelineKey::DEFERRED_PREPASS;
+                AlphaMode::Mask(_) => {
+                    key |= MeshPipelineKey::MAY_DISCARD;
                 }
+                _ => (),
+            };
 
-                let pipeline = pipelines.specialize(&pipeline_cache, custom_pipeline, key);
-                transparent_phase.add(Transparent3d {
-                    entity: (entity, *main_entity),
-                    pipeline,
-                    draw_function: draw_custom,
-                    distance: rangefinder.distance_translation(&mesh_instance.translation),
-                    batch_range: 0..1,
-                    extra_index: PhaseItemExtraIndex::None,
-                    indexed: true,
-                });
+            if normal_prepass {
+                key |= MeshPipelineKey::NORMAL_PREPASS;
             }
+
+            if depth_prepass {
+                key |= MeshPipelineKey::DEPTH_PREPASS;
+            }
+
+            if motion_vector_prepass {
+                key |= MeshPipelineKey::MOTION_VECTOR_PREPASS;
+            }
+
+            if deferred_prepass {
+                key |= MeshPipelineKey::DEFERRED_PREPASS;
+            }
+
+            let pipeline = pipelines.specialize(&pipeline_cache, custom_pipeline, key);
+            transparent_phase.add(Transparent3d {
+                entity: (entity, *main_entity),
+                pipeline,
+                draw_function: draw_custom,
+                distance: rangefinder.distance_translation(&mesh_instance.translation),
+                batch_range: 0..1,
+                extra_index: PhaseItemExtraIndex::None,
+                indexed: true,
+            });
         }
     }
 }
