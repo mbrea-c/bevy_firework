@@ -353,8 +353,7 @@ pub fn spawn_particles(
                 manual_queued_count,
                 ..
             } = data.into_inner();
-            for i in 0..settings.emission_settings.len() {
-                let emission_settings = &settings.emission_settings[i];
+            for (i, emission_settings) in settings.emission_settings.iter().enumerate() {
                 let emission_data = &mut emission[i];
                 let particle_settings =
                     &settings.particle_settings[emission_settings.particle_index];

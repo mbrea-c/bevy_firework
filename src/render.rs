@@ -565,6 +565,7 @@ fn prepare_instance_buffers(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_firework_bindgroup(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
