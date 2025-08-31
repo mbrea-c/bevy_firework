@@ -28,7 +28,7 @@ use bevy::{
         renderer::RenderDevice,
         sync_world::MainEntity,
         texture::GpuImage,
-        view::{ExtractedView, ViewTarget},
+        view::{ExtractedView, RenderLayers, ViewTarget},
     },
 };
 use bytemuck::{Pod, Zeroable};
@@ -352,14 +352,19 @@ pub const FIREWORK_NORMAL_MAP_TEXTURE_BIT: u32 = 1 << 1;
 pub const FIREWORK_ORM_TEXTURE_BIT: u32 = 1 << 2;
 
 fn extract_component(
-    item: (&ParticleSpawnerData, &ParticleSpawner),
+    item: (
+        &ParticleSpawnerData,
+        &ParticleSpawner,
+        Option<&RenderLayers>,
+    ),
 ) -> Vec<(
     FireworkRenderEntityMarker,
     ParticleMaterialData,
     FireworkUniform,
     FireworkImages,
+    RenderLayers,
 )> {
-    let (data, settings) = item;
+    let (data, settings, render_layers) = item;
     data.particles
         .iter()
         .enumerate()
@@ -397,6 +402,7 @@ fn extract_component(
                     normal_map_texture: particle_settings.normal_map_texture.clone(),
                     orm_texture: particle_settings.orm_texture.clone(),
                 },
+                render_layers.cloned().unwrap_or_default(),
             )
         })
         .collect()
@@ -415,10 +421,20 @@ fn cleanup_firework_components(
 
 /// We need to do some custom extraction since each spawner entity can produce several render
 /// entities
+#[allow(clippy::type_complexity)]
 fn extract_firework_components(
     mut commands: Commands,
     mut previous_len: Local<usize>,
-    query: Extract<Query<(Entity, (&ParticleSpawnerData, &ParticleSpawner))>>,
+    query: Extract<
+        Query<(
+            Entity,
+            (
+                &ParticleSpawnerData,
+                &ParticleSpawner,
+                Option<&RenderLayers>,
+            ),
+        )>,
+    >,
 ) {
     let mut values = Vec::with_capacity(*previous_len);
     for (entity, query_item) in &query {
@@ -440,7 +456,12 @@ fn queue_custom(
     mut pipelines: ResMut<SpecializedRenderPipelines<FireworkPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     render_mesh_instances: Res<RenderMeshInstances>,
-    particle_materials: Query<(Entity, &MainEntity, &ParticleMaterialData)>,
+    particle_materials: Query<(
+        Entity,
+        &MainEntity,
+        &ParticleMaterialData,
+        Option<&RenderLayers>,
+    )>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut views: Query<(
         &ExtractedView,
@@ -452,6 +473,7 @@ fn queue_custom(
             Has<MotionVectorPrepass>,
             Has<DeferredPrepass>,
         ),
+        Option<&RenderLayers>,
     )>,
 ) {
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
@@ -461,6 +483,7 @@ fn queue_custom(
         maybe_shadow_filtering_method,
         msaa,
         (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
+        render_layers,
     ) in &mut views
     {
         firework_uniform_layouts.ensure_created(&render_device, msaa.samples());
@@ -491,7 +514,15 @@ fn queue_custom(
         }
 
         let rangefinder = view.rangefinder3d();
-        for (entity, main_entity, particle_material_data) in &particle_materials {
+        for (entity, main_entity, particle_material_data, render_layers_entity) in
+            &particle_materials
+        {
+            let render_layers_view = render_layers.unwrap_or_default();
+            let render_layers_entity = render_layers_entity.unwrap_or_default();
+            if !render_layers_view.intersects(render_layers_entity) {
+                continue;
+            }
+
             let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
             else {
                 continue;
