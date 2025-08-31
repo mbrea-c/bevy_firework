@@ -421,6 +421,7 @@ fn cleanup_firework_components(
 
 /// We need to do some custom extraction since each spawner entity can produce several render
 /// entities
+#[allow(clippy::type_complexity)]
 fn extract_firework_components(
     mut commands: Commands,
     mut previous_len: Local<usize>,
@@ -595,6 +596,7 @@ fn prepare_instance_buffers(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_firework_bindgroup(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
