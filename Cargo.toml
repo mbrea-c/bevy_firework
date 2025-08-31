@@ -29,6 +29,10 @@ name = "collision"
 required-features = ["physics_avian"]
 
 [[example]]
+name = "textures"
+required-features = ["physics_avian"]
+
+[[example]]
 name = "stress_test"
 required-features = ["physics_avian"]
 
