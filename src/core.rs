@@ -4,7 +4,6 @@ use super::emission_shape::EmissionShape;
 use bevy::{asset::weak_handle, prelude::*, render::batching::NoAutomaticBatching};
 use bevy_utilitarian::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 #[cfg(feature = "physics_avian")]
 use avian3d::prelude::*;
@@ -15,10 +14,35 @@ pub const DEFAULT_MESH: Handle<Mesh> = weak_handle!("ba671aee-04f4-485d-9d1e-ad7
 pub enum EmissionPacing {
     /// Number of particles emitted at once
     OneShot(usize),
-    /// Rate of particles per second
-    Rate(f32),
     /// Particles get emitted on method calls
     OnDemand,
+    /// Spawn a given number of particles over the specified time period
+    CountOverDuration {
+        /// Number of particles that will be spawned in the given duration
+        count: f32,
+        /// Duration of spawn cycle. If emission mode is nested, this will be ignored, and duration
+        /// will be the lifetime of the target particle
+        duration: f32,
+        /// Percentage of duration when particle spawning begins
+        offset_start: f32,
+        /// Percentage of duration when particle spawning ends
+        offset_end: f32,
+    },
+}
+
+impl EmissionPacing {
+    pub fn is_one_shot(&self) -> bool {
+        matches!(self, EmissionPacing::OneShot(_))
+    }
+
+    pub fn rate(rate: f32) -> Self {
+        Self::CountOverDuration {
+            count: rate,
+            duration: 1.,
+            offset_start: 0.,
+            offset_end: 1.,
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
@@ -27,21 +51,8 @@ pub enum EmissionMode {
     Global,
     Nested {
         /// The particle settings index of the particle we will be spawning under
-        target_particle: usize,
-        /// How many particles should be emitted over the lifetime of the target particle. This
-        /// number will be pro-rated if spawn_start and spawn_end aren't 0. and 1. respectively.
-        emit_rate: f32,
-        /// Percentage of lifetime of target particle when emission should start
-        spawn_start: f32,
-        /// Percentage of lifetime of target particle when emission should end
-        spawn_end: f32,
+        target_particle_type: usize,
     },
-}
-
-impl EmissionPacing {
-    pub fn is_one_shot(&self) -> bool {
-        matches!(self, EmissionPacing::OneShot(_))
-    }
 }
 
 /// Mirrors AlphaMode, but implements serialize and deserialize
@@ -198,7 +209,7 @@ impl Default for EmissionSettings {
         Self {
             particle_index: 0,
             emission_mode: EmissionMode::default(),
-            emission_pacing: EmissionPacing::Rate(5.),
+            emission_pacing: EmissionPacing::rate(5.),
             emission_shape: EmissionShape::Point,
             initial_velocity: RandVec3::constant(Vec3::ZERO),
             initial_velocity_radial: RandF32::constant(0.),
@@ -240,14 +251,19 @@ impl std::fmt::Debug for ParticleCollisionSettings {
     }
 }
 
+pub struct EmissionData {
+    last_emission: f32,
+    time_passed_in_cycle: f32,
+}
+
 #[derive(Component, Default)]
 pub struct ParticleSpawnerData {
     /// Whether this particle system has already been initialized from the settings.
     // NOTE: This won't be needed once we have `Construct`
     pub initialized: bool,
     pub enabled: bool,
-    pub cooldown: Vec<Timer>,
     pub particles: Vec<Vec<ParticleData>>,
+    pub emission: Vec<EmissionData>,
     pub parent_velocity: Vec3,
     /// Whether we have already sent an event about the particle system having finished
     pub finished_notified: bool,
@@ -275,8 +291,8 @@ pub struct ParticleData {
     pub base_color: LinearRgba,
     pub emissive_color: LinearRgba,
     pub pbr: bool,
-    /// Percentage through our lifetime when the last subparticle was emitted
-    pub last_emitted_lifetime: Vec<f32>,
+    /// Age when the last subparticle was emitted
+    pub last_emitted_age: Vec<f32>,
 }
 
 #[derive(Component, Clone, Copy, Debug)]
@@ -301,15 +317,12 @@ pub fn sync_spawner_data(
     mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
 ) {
     for (settings, mut data) in &mut spawners {
-        data.cooldown = settings
+        data.emission = settings
             .emission_settings
             .iter()
-            .map(|emission_settings| {
-                if let EmissionPacing::Rate(rate) = &emission_settings.emission_pacing {
-                    Timer::new(Duration::from_secs_f32(1. / rate), TimerMode::Repeating)
-                } else {
-                    Timer::new(Duration::ZERO, TimerMode::Once)
-                }
+            .map(|_| EmissionData {
+                last_emission: 0.,
+                time_passed_in_cycle: 0.,
             })
             .collect();
         data.particles = vec![Vec::new(); settings.particle_settings.len()];
@@ -330,30 +343,55 @@ pub fn spawn_particles(
     )>,
     time: Res<Time>,
 ) {
-    for (transform, global_transform, settings, mut data, opt_modifier) in
-        &mut particle_systems_query
-    {
+    for (transform, global_transform, settings, data, opt_modifier) in &mut particle_systems_query {
         if data.enabled {
+            let ParticleSpawnerData {
+                enabled,
+                particles,
+                emission,
+                parent_velocity,
+                manual_queued_count,
+                ..
+            } = data.into_inner();
             for i in 0..settings.emission_settings.len() {
                 let emission_settings = &settings.emission_settings[i];
+                let emission_data = &mut emission[i];
                 let particle_settings =
                     &settings.particle_settings[emission_settings.particle_index];
 
                 match emission_settings.emission_mode {
                     EmissionMode::Global => {
-                        let cooldown = &mut data.cooldown[i];
-                        cooldown.tick(time.delta());
-
                         let particles_to_spawn = match &emission_settings.emission_pacing {
                             EmissionPacing::OneShot(count) => {
-                                data.enabled = false;
+                                *enabled = false;
                                 *count
                             }
-                            EmissionPacing::Rate(_) => cooldown.times_finished_this_tick() as usize,
                             EmissionPacing::OnDemand => {
-                                let count = data.manual_queued_count;
-                                data.manual_queued_count = 0;
+                                let count = *manual_queued_count;
+                                *manual_queued_count = 0;
                                 count
+                            }
+                            EmissionPacing::CountOverDuration {
+                                count,
+                                duration,
+                                offset_start,
+                                offset_end,
+                            } => {
+                                emission_data.time_passed_in_cycle =
+                                    (emission_data.time_passed_in_cycle + time.delta_secs())
+                                        .rem_euclid(*duration);
+                                let (particles_to_spawn, next_last_emission) =
+                                    compute_emission_count(
+                                        emission_data.time_passed_in_cycle,
+                                        emission_data.last_emission,
+                                        *duration,
+                                        *offset_start,
+                                        *offset_end,
+                                        *count,
+                                    );
+                                emission_data.last_emission = next_last_emission;
+
+                                particles_to_spawn
                             }
                         };
 
@@ -372,7 +410,7 @@ pub fn spawn_particles(
                                     + spawn_offset.normalize_or_zero()
                                         * emission_settings.initial_velocity_radial.generate())
                                 + if emission_settings.inherit_parent_velocity {
-                                    data.parent_velocity
+                                    *parent_velocity
                                 } else {
                                     Vec3::ZERO
                                 };
@@ -380,7 +418,7 @@ pub fn spawn_particles(
                             let initial_scale =
                                 particle_settings.initial_scale.generate() * modifier.scale;
 
-                            data.particles[emission_settings.particle_index].push(ParticleData {
+                            particles[emission_settings.particle_index].push(ParticleData {
                                 position: origin.translation + spawn_offset,
                                 lifetime: particle_settings.lifetime.generate(),
                                 initial_scale,
@@ -394,32 +432,40 @@ pub fn spawn_particles(
                                 angular_velocity: emission_settings
                                     .initial_angular_velocity
                                     .generate(),
-                                last_emitted_lifetime: vec![
-                                    f32::MIN;
-                                    settings.emission_settings.len()
-                                ],
+                                last_emitted_age: vec![f32::MIN; settings.emission_settings.len()],
                             })
                         }
                     }
                     EmissionMode::Nested {
-                        target_particle,
-                        emit_rate,
-                        spawn_start,
-                        spawn_end,
+                        target_particle_type,
                     } => {
+                        let EmissionPacing::CountOverDuration {
+                            count,
+                            offset_start,
+                            offset_end,
+                            ..
+                        } = &emission_settings.emission_pacing
+                        else {
+                            warn_once!(
+                                "Only `CountOverDuration` emission pacing allowed in combination with `Nested` emission mode"
+                            );
+                            continue;
+                        };
                         let modifier = opt_modifier.cloned().unwrap_or_default();
 
-                        for p_i in 0..data.particles[target_particle].len() {
-                            let other_particle = &mut data.particles[target_particle][p_i];
-                            let percent_passed = other_particle.age / other_particle.lifetime;
-                            let time_passed = percent_passed.min(spawn_end)
-                                - other_particle.last_emitted_lifetime[i].max(spawn_start);
-                            let times_needed_to_emit = time_passed.div_euclid(emit_rate);
-                            let times_needed_to_emit_usize = times_needed_to_emit as usize;
-                            let last_emission = other_particle.last_emitted_lifetime[i]
-                                .max(spawn_start)
-                                + times_needed_to_emit * emit_rate;
-                            other_particle.last_emitted_lifetime[i] = last_emission;
+                        for p_i in 0..particles[target_particle_type].len() {
+                            let other_particle = &mut particles[target_particle_type][p_i];
+                            let (times_needed_to_emit_usize, next_last_emitted_age) =
+                                compute_emission_count(
+                                    other_particle.age,
+                                    other_particle.last_emitted_age[i],
+                                    other_particle.lifetime,
+                                    *offset_start,
+                                    *offset_end,
+                                    *count,
+                                );
+
+                            other_particle.last_emitted_age[i] = next_last_emitted_age;
 
                             let origin_position = other_particle.position;
                             let origin_rotation = other_particle.rotation;
@@ -442,29 +488,27 @@ pub fn spawn_particles(
                                     particle_settings.initial_scale.generate() * modifier.scale;
                                 let initial_position = origin_position + spawn_offset;
 
-                                data.particles[emission_settings.particle_index].push(
-                                    ParticleData {
-                                        position: initial_position,
-                                        lifetime: particle_settings.lifetime.generate(),
-                                        initial_scale,
-                                        scale: initial_scale,
-                                        velocity,
-                                        age: 0.,
-                                        base_color: particle_settings.base_color.sample_clamped(0.),
-                                        emissive_color: particle_settings
-                                            .emissive_color
-                                            .sample_clamped(0.),
-                                        pbr: particle_settings.pbr,
-                                        rotation: emission_settings.initial_rotation,
-                                        angular_velocity: emission_settings
-                                            .initial_angular_velocity
-                                            .generate(),
-                                        last_emitted_lifetime: vec![
-                                            f32::MIN;
-                                            settings.emission_settings.len()
-                                        ],
-                                    },
-                                )
+                                particles[emission_settings.particle_index].push(ParticleData {
+                                    position: initial_position,
+                                    lifetime: particle_settings.lifetime.generate(),
+                                    initial_scale,
+                                    scale: initial_scale,
+                                    velocity,
+                                    age: 0.,
+                                    base_color: particle_settings.base_color.sample_clamped(0.),
+                                    emissive_color: particle_settings
+                                        .emissive_color
+                                        .sample_clamped(0.),
+                                    pbr: particle_settings.pbr,
+                                    rotation: emission_settings.initial_rotation,
+                                    angular_velocity: emission_settings
+                                        .initial_angular_velocity
+                                        .generate(),
+                                    last_emitted_age: vec![
+                                        f32::MIN;
+                                        settings.emission_settings.len()
+                                    ],
+                                })
                             }
                         }
                     }
@@ -472,6 +516,30 @@ pub fn spawn_particles(
             }
         }
     }
+}
+
+fn compute_emission_count(
+    time_passed_in_cycle: f32,
+    last_emission: f32,
+    cycle_duration: f32,
+    // as a percentage
+    emission_offset_start: f32,
+    // as a percentage
+    emission_offset_end: f32,
+    particles_per_cycle: f32,
+) -> (usize, f32) {
+    let percent_passed = time_passed_in_cycle / cycle_duration;
+    let last_emission_percent = last_emission / cycle_duration;
+    let percent_passed_since_emission =
+        percent_passed.min(emission_offset_end) - last_emission_percent.max(emission_offset_start);
+    let percent_between_emissions =
+        (emission_offset_end - emission_offset_start) / particles_per_cycle;
+    let times_needed_to_emit = percent_passed_since_emission.div_euclid(percent_between_emissions);
+    let times_needed_to_emit_usize = times_needed_to_emit as usize;
+    let next_last_emission_percent = last_emission_percent.max(emission_offset_start)
+        + times_needed_to_emit * percent_between_emissions;
+    let next_last_emission = next_last_emission_percent * cycle_duration;
+    (times_needed_to_emit_usize, next_last_emission)
 }
 
 pub fn update_particles(
@@ -683,4 +751,39 @@ fn particle_collision(
     }
 
     (pos, vel)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::core::compute_emission_count;
+
+    #[test]
+    fn test_compute_emission_count() {
+        let timestep = 0.016;
+        let mut age = 0.;
+        let mut last_emission = f32::MIN;
+        let duration = 3.;
+        let particles_per_duration = 23.;
+
+        let mut particles_so_far = 0;
+
+        while age <= duration {
+            let (emit_particles, new_last_emitted) = compute_emission_count(
+                age,
+                last_emission,
+                duration,
+                0.,
+                1.,
+                particles_per_duration,
+            );
+            particles_so_far += emit_particles;
+            last_emission = new_last_emitted;
+            age += timestep;
+        }
+
+        assert!(
+            particles_so_far == particles_per_duration as usize
+                || particles_so_far == (particles_per_duration as usize - 1)
+        );
+    }
 }

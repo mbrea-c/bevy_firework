@@ -76,7 +76,7 @@ fn setup(
             }],
             emission_settings: vec![EmissionSettings {
                 particle_index: 0,
-                emission_pacing: EmissionPacing::Rate(100.),
+                emission_pacing: EmissionPacing::rate(100.),
                 emission_shape: EmissionShape::Circle {
                     normal: Vec3::Y,
                     radius: 0.3,

@@ -1,4 +1,4 @@
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+use std::f32::consts::FRAC_PI_2;
 
 use avian3d::prelude::{Collider, SpatialQueryFilter};
 use bevy::{
@@ -116,10 +116,10 @@ fn setup(
                 EmissionSettings {
                     particle_index: 0,
                     emission_mode: EmissionMode::Global,
-                    emission_pacing: EmissionPacing::Rate(12.),
+                    emission_pacing: EmissionPacing::rate(12.),
                     emission_shape: EmissionShape::Point,
                     initial_velocity: RandVec3 {
-                        magnitude: RandF32 { min: 5., max: 15. },
+                        magnitude: RandF32 { min: 2., max: 5. },
                         direction: Vec3::Y,
                         spread: 0.4,
                     },
@@ -135,12 +135,15 @@ fn setup(
                 EmissionSettings {
                     particle_index: 1,
                     emission_mode: EmissionMode::Nested {
-                        target_particle: 0,
-                        emit_rate: 0.01,
-                        spawn_start: 0.,
-                        spawn_end: 0.1,
+                        target_particle_type: 0,
                     },
-                    emission_pacing: EmissionPacing::Rate(15.),
+                    emission_pacing: EmissionPacing::CountOverDuration {
+                        count: 6.,
+                        offset_start: 0.,
+                        offset_end: 0.1,
+                        // Is ignored
+                        duration: 0.,
+                    },
                     emission_shape: EmissionShape::Point,
                     initial_velocity: RandVec3::constant(Vec3::ZERO),
                     initial_velocity_radial: RandF32::constant(0.),
@@ -153,7 +156,7 @@ fn setup(
             spawn_transform_mode: SpawnTransformMode::Local,
         },
         Transform {
-            translation: Vec3::new(-3., 2., 0.),
+            translation: Vec3::new(-2., 2., 0.),
             rotation: Quat::from_rotation_arc(Vec3::Y, Vec3::X),
             ..default()
         },
@@ -169,7 +172,7 @@ fn setup(
             ..default()
         })),
         Transform {
-            translation: Vec3::new(-3., 2., -0.5),
+            translation: Vec3::new(-2., 2., -0.5),
             ..default()
         },
     ));
@@ -182,16 +185,20 @@ fn setup(
         Collider::cylinder(4., 0.2),
     ));
 
-    // cube
+    // Pyramid
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::from_size(Vec3::ONE))),
-        MeshMaterial3d(materials.add(Color::LinearRgba(LinearRgba::rgb(0.6, 0.3, 0.2)))),
+        Mesh3d(meshes.add(Cone::new(0.5, 1.))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: LinearRgba::rgb(0.6, 0.3, 0.2).into(),
+            metallic: 0.,
+            perceptual_roughness: 0.05,
+            ..default()
+        })),
         Transform {
-            translation: Vec3::new(1.0, 0.5, 0.0),
-            rotation: Quat::from_rotation_x(FRAC_PI_4) * Quat::from_rotation_z(FRAC_PI_4),
+            translation: Vec3::new(0., 0.5, 0.),
             ..default()
         },
-        Collider::cuboid(1., 1., 1.),
+        Collider::cone(0.5, 1.),
     ));
 
     // light
