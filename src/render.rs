@@ -28,7 +28,7 @@ use bevy::{
         renderer::RenderDevice,
         sync_world::MainEntity,
         texture::GpuImage,
-        view::{ExtractedView, ViewTarget},
+        view::{ExtractedView, RenderLayers, ViewTarget},
     },
 };
 use bytemuck::{Pod, Zeroable};
@@ -352,14 +352,19 @@ pub const FIREWORK_NORMAL_MAP_TEXTURE_BIT: u32 = 1 << 1;
 pub const FIREWORK_ORM_TEXTURE_BIT: u32 = 1 << 2;
 
 fn extract_component(
-    item: (&ParticleSpawnerData, &ParticleSpawner),
+    item: (
+        &ParticleSpawnerData,
+        &ParticleSpawner,
+        Option<&RenderLayers>,
+    ),
 ) -> Vec<(
     FireworkRenderEntityMarker,
     ParticleMaterialData,
     FireworkUniform,
     FireworkImages,
+    RenderLayers,
 )> {
-    let (data, settings) = item;
+    let (data, settings, render_layers) = item;
     data.particles
         .iter()
         .enumerate()
@@ -397,6 +402,7 @@ fn extract_component(
                     normal_map_texture: particle_settings.normal_map_texture.clone(),
                     orm_texture: particle_settings.orm_texture.clone(),
                 },
+                render_layers.cloned().unwrap_or_default(),
             )
         })
         .collect()
@@ -418,7 +424,16 @@ fn cleanup_firework_components(
 fn extract_firework_components(
     mut commands: Commands,
     mut previous_len: Local<usize>,
-    query: Extract<Query<(Entity, (&ParticleSpawnerData, &ParticleSpawner))>>,
+    query: Extract<
+        Query<(
+            Entity,
+            (
+                &ParticleSpawnerData,
+                &ParticleSpawner,
+                Option<&RenderLayers>,
+            ),
+        )>,
+    >,
 ) {
     let mut values = Vec::with_capacity(*previous_len);
     for (entity, query_item) in &query {
@@ -440,7 +455,12 @@ fn queue_custom(
     mut pipelines: ResMut<SpecializedRenderPipelines<FireworkPipeline>>,
     pipeline_cache: Res<PipelineCache>,
     render_mesh_instances: Res<RenderMeshInstances>,
-    particle_materials: Query<(Entity, &MainEntity, &ParticleMaterialData)>,
+    particle_materials: Query<(
+        Entity,
+        &MainEntity,
+        &ParticleMaterialData,
+        Option<&RenderLayers>,
+    )>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut views: Query<(
         &ExtractedView,
@@ -452,6 +472,7 @@ fn queue_custom(
             Has<MotionVectorPrepass>,
             Has<DeferredPrepass>,
         ),
+        Option<&RenderLayers>,
     )>,
 ) {
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
@@ -461,6 +482,7 @@ fn queue_custom(
         maybe_shadow_filtering_method,
         msaa,
         (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
+        render_layers,
     ) in &mut views
     {
         firework_uniform_layouts.ensure_created(&render_device, msaa.samples());
@@ -491,58 +513,66 @@ fn queue_custom(
         }
 
         let rangefinder = view.rangefinder3d();
-        for (entity, main_entity, particle_material_data) in &particle_materials {
+        for (entity, main_entity, particle_material_data, render_layers_entity) in
+            &particle_materials
+        {
             let Some(mesh_instance) = render_mesh_instances.render_mesh_queue_data(*main_entity)
             else {
                 continue;
             };
-            let mut key = view_key
-                | MeshPipelineKey::from_primitive_topology(PrimitiveTopology::TriangleList);
-            //key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
-            match particle_material_data.alpha_mode {
-                AlphaMode::Blend => {
-                    key |= MeshPipelineKey::BLEND_ALPHA;
+            // check if same view layer else continue
+            let render_layers_view = render_layers.unwrap_or_default();
+            let render_layers_entity = render_layers_entity.unwrap_or_default();
+
+            if render_layers_view.intersects(render_layers_entity) {
+                let mut key = view_key
+                    | MeshPipelineKey::from_primitive_topology(PrimitiveTopology::TriangleList);
+                //key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
+                match particle_material_data.alpha_mode {
+                    AlphaMode::Blend => {
+                        key |= MeshPipelineKey::BLEND_ALPHA;
+                    }
+                    AlphaMode::Premultiplied | AlphaMode::Add => {
+                        // Premultiplied and Add share the same pipeline key
+                        // They're made distinct in the PBR shader, via `premultiply_alpha()`
+                        key |= MeshPipelineKey::BLEND_PREMULTIPLIED_ALPHA;
+                    }
+                    AlphaMode::Multiply => {
+                        key |= MeshPipelineKey::BLEND_MULTIPLY;
+                    }
+                    AlphaMode::Mask(_) => {
+                        key |= MeshPipelineKey::MAY_DISCARD;
+                    }
+                    _ => (),
+                };
+
+                if normal_prepass {
+                    key |= MeshPipelineKey::NORMAL_PREPASS;
                 }
-                AlphaMode::Premultiplied | AlphaMode::Add => {
-                    // Premultiplied and Add share the same pipeline key
-                    // They're made distinct in the PBR shader, via `premultiply_alpha()`
-                    key |= MeshPipelineKey::BLEND_PREMULTIPLIED_ALPHA;
+
+                if depth_prepass {
+                    key |= MeshPipelineKey::DEPTH_PREPASS;
                 }
-                AlphaMode::Multiply => {
-                    key |= MeshPipelineKey::BLEND_MULTIPLY;
+
+                if motion_vector_prepass {
+                    key |= MeshPipelineKey::MOTION_VECTOR_PREPASS;
                 }
-                AlphaMode::Mask(_) => {
-                    key |= MeshPipelineKey::MAY_DISCARD;
+
+                if deferred_prepass {
+                    key |= MeshPipelineKey::DEFERRED_PREPASS;
                 }
-                _ => (),
-            };
 
-            if normal_prepass {
-                key |= MeshPipelineKey::NORMAL_PREPASS;
+                let pipeline = pipelines.specialize(&pipeline_cache, custom_pipeline, key);
+                transparent_phase.add(Transparent3d {
+                    entity: (entity, *main_entity),
+                    pipeline,
+                    draw_function: draw_custom,
+                    distance: rangefinder.distance_translation(&mesh_instance.translation),
+                    batch_range: 0..1,
+                    extra_index: PhaseItemExtraIndex::None,
+                    indexed: true,
+                });
             }
-
-            if depth_prepass {
-                key |= MeshPipelineKey::DEPTH_PREPASS;
-            }
-
-            if motion_vector_prepass {
-                key |= MeshPipelineKey::MOTION_VECTOR_PREPASS;
-            }
-
-            if deferred_prepass {
-                key |= MeshPipelineKey::DEFERRED_PREPASS;
-            }
-
-            let pipeline = pipelines.specialize(&pipeline_cache, custom_pipeline, key);
-            transparent_phase.add(Transparent3d {
-                entity: (entity, *main_entity),
-                pipeline,
-                draw_function: draw_custom,
-                distance: rangefinder.distance_translation(&mesh_instance.translation),
-                batch_range: 0..1,
-                extra_index: PhaseItemExtraIndex::None,
-                indexed: true,
-            });
         }
     }
 }
@@ -565,7 +595,6 @@ fn prepare_instance_buffers(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn prepare_firework_bindgroup(
     mut commands: Commands,
     render_device: Res<RenderDevice>,
