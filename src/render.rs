@@ -337,6 +337,7 @@ pub struct FireworkUniformBindgroups {
     bindgroups: HashMap<Entity, BindGroup>,
 }
 
+#[allow(dead_code)]
 #[derive(Component, ShaderType, Clone, Debug)]
 pub struct FireworkUniform {
     alpha_mode: u32,
