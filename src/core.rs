@@ -1,7 +1,9 @@
 use crate::curve::{FireworkCurve, FireworkGradient};
 
 use super::emission_shape::EmissionShape;
-use bevy::{asset::weak_handle, prelude::*, render::batching::NoAutomaticBatching};
+use bevy::{
+    asset::weak_handle, ecs::system::SystemId, prelude::*, render::batching::NoAutomaticBatching,
+};
 use bevy_utilitarian::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -161,6 +163,11 @@ pub struct EmissionSettings {
     pub initial_angular_velocity: RandVec3,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct ParticleEventHandlers {
+    pub particles_destroyed: Vec<Option<SystemId<In<Vec<ParticleData>>, ()>>>,
+}
+
 #[derive(Component, Reflect, Clone, Debug)]
 #[require(
     ParticleSpawnerData,
@@ -177,6 +184,8 @@ pub struct ParticleSpawner {
     pub starts_enabled: bool,
     /// Determines how to compute the initial position of the spawned particles
     pub spawn_transform_mode: SpawnTransformMode,
+    #[reflect(ignore)]
+    pub event_handlers: ParticleEventHandlers,
 }
 
 impl Default for ParticleSettings {
@@ -227,6 +236,7 @@ impl Default for ParticleSpawner {
             emission_settings: vec![EmissionSettings::default()],
             starts_enabled: true,
             spawn_transform_mode: default(),
+            event_handlers: ParticleEventHandlers::default(),
         }
     }
 }
@@ -544,6 +554,7 @@ fn compute_emission_count(
 pub fn update_particles(
     mut particle_systems_query: Query<(&ParticleSpawner, &mut ParticleSpawnerData)>,
     time: Res<Time>,
+    commands: ParallelCommands,
     #[cfg(feature = "physics_avian")] spatial_query: SpatialQuery,
 ) {
     particle_systems_query
@@ -551,13 +562,16 @@ pub fn update_particles(
         .for_each(|(settings, mut data)| {
             for i in 0..settings.particle_settings.len() {
                 let particle_settings = &settings.particle_settings[i];
+                let mut destroyed = vec![];
                 data.particles[i] = data.particles[i]
                     .iter()
                     .filter_map(|particle| {
                         let mut particle = particle.clone();
 
                         particle.age += time.delta_secs();
+
                         if particle.age >= particle.lifetime {
+                            destroyed.push(particle);
                             return None;
                         }
 
@@ -612,6 +626,14 @@ pub fn update_particles(
                         Some(particle)
                     })
                     .collect();
+                if !destroyed.is_empty()
+                    && let Some(Some(destroyed_handler)) =
+                        settings.event_handlers.particles_destroyed.get(i)
+                {
+                    commands.command_scope(|mut cmds| {
+                        cmds.run_system_with(*destroyed_handler, destroyed);
+                    })
+                }
             }
         });
 }
