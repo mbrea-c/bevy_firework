@@ -9,7 +9,18 @@ description = "CPU-driven, batch-rendered particle system for the Bevy game engi
 keywords = ["bevy", "gamedev", "particles", "graphics"]
 
 [dependencies]
-bevy = "0.16"
+bevy = { version = "0.16", default-features = false, features = [
+    "bevy_render",
+    "bevy_core_pipeline",
+    "bevy_pbr",
+    "bevy_text",
+    "bevy_ui",
+    "png",
+    "tonemapping_luts",
+    "default_font",
+    "bevy_winit",
+    "x11",
+] }
 bytemuck = "1.14.3"
 rand = "0.9.1"
 bevy_utilitarian = "0.7"
