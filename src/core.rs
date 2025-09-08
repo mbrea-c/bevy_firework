@@ -141,6 +141,8 @@ pub struct ParticleSettings {
     /// If None, no particle collision will occur.
     #[cfg(feature = "physics_avian")]
     pub collision_settings: Option<ParticleCollisionSettings>,
+    #[reflect(ignore)]
+    pub event_handlers: ParticleEventHandlers,
 }
 
 #[derive(Reflect, Clone, Debug)]
@@ -165,7 +167,7 @@ pub struct EmissionSettings {
 
 #[derive(Clone, Debug, Default)]
 pub struct ParticleEventHandlers {
-    pub particles_destroyed: Vec<Option<SystemId<In<Vec<ParticleData>>, ()>>>,
+    pub particles_destroyed: Option<SystemId<In<Vec<ParticleData>>, ()>>,
 }
 
 #[derive(Component, Reflect, Clone, Debug)]
@@ -184,8 +186,6 @@ pub struct ParticleSpawner {
     pub starts_enabled: bool,
     /// Determines how to compute the initial position of the spawned particles
     pub spawn_transform_mode: SpawnTransformMode,
-    #[reflect(ignore)]
-    pub event_handlers: ParticleEventHandlers,
 }
 
 impl Default for ParticleSettings {
@@ -209,6 +209,7 @@ impl Default for ParticleSettings {
             pbr: false,
             #[cfg(feature = "physics_avian")]
             collision_settings: None,
+            event_handlers: default(),
         }
     }
 }
@@ -236,7 +237,6 @@ impl Default for ParticleSpawner {
             emission_settings: vec![EmissionSettings::default()],
             starts_enabled: true,
             spawn_transform_mode: default(),
-            event_handlers: ParticleEventHandlers::default(),
         }
     }
 }
@@ -264,6 +264,9 @@ impl std::fmt::Debug for ParticleCollisionSettings {
 pub struct EmissionData {
     last_emission: f32,
     time_passed_in_cycle: f32,
+    enabled: bool,
+    /// True iff this emitter only emits on existing particles (e.g. [`EmissionMode::Nested`]).
+    emits_on_other_particles: bool,
 }
 
 #[derive(Component, Default)]
@@ -271,7 +274,6 @@ pub struct ParticleSpawnerData {
     /// Whether this particle system has already been initialized from the settings.
     // NOTE: This won't be needed once we have `Construct`
     pub initialized: bool,
-    pub enabled: bool,
     pub particles: Vec<Vec<ParticleData>>,
     pub emission: Vec<EmissionData>,
     pub parent_velocity: Vec3,
@@ -284,6 +286,21 @@ pub struct ParticleSpawnerData {
 impl ParticleSpawnerData {
     pub fn queue_particles(&mut self, count: usize) {
         self.manual_queued_count += count;
+    }
+
+    pub fn active(&self) -> bool {
+        let mut enabled = false;
+
+        for emission in &self.emission {
+            if emission.emits_on_other_particles {
+                enabled |= emission.enabled
+                    && self.particles.iter().any(|particles| !particles.is_empty());
+            } else {
+                enabled |= emission.enabled;
+            }
+        }
+
+        enabled
     }
 }
 
@@ -330,14 +347,18 @@ pub fn sync_spawner_data(
         data.emission = settings
             .emission_settings
             .iter()
-            .map(|_| EmissionData {
+            .map(|emission_settings| EmissionData {
                 last_emission: 0.,
                 time_passed_in_cycle: 0.,
+                enabled: settings.starts_enabled,
+                emits_on_other_particles: match emission_settings.emission_mode {
+                    EmissionMode::Global => false,
+                    EmissionMode::Nested { .. } => true,
+                },
             })
             .collect();
         data.particles = vec![Vec::new(); settings.particle_settings.len()];
         if !data.initialized {
-            data.enabled = settings.starts_enabled;
             data.initialized = true;
         }
     }
@@ -354,9 +375,8 @@ pub fn spawn_particles(
     time: Res<Time>,
 ) {
     for (transform, global_transform, settings, data, opt_modifier) in &mut particle_systems_query {
-        if data.enabled {
+        if data.active() {
             let ParticleSpawnerData {
-                enabled,
                 particles,
                 emission,
                 parent_velocity,
@@ -365,6 +385,9 @@ pub fn spawn_particles(
             } = data.into_inner();
             for (i, emission_settings) in settings.emission_settings.iter().enumerate() {
                 let emission_data = &mut emission[i];
+                if !emission_data.enabled {
+                    continue;
+                }
                 let particle_settings =
                     &settings.particle_settings[emission_settings.particle_index];
 
@@ -372,7 +395,7 @@ pub fn spawn_particles(
                     EmissionMode::Global => {
                         let particles_to_spawn = match &emission_settings.emission_pacing {
                             EmissionPacing::OneShot(count) => {
-                                *enabled = false;
+                                emission_data.enabled = false;
                                 *count
                             }
                             EmissionPacing::OnDemand => {
@@ -627,8 +650,8 @@ pub fn update_particles(
                     })
                     .collect();
                 if !destroyed.is_empty()
-                    && let Some(Some(destroyed_handler)) =
-                        settings.event_handlers.particles_destroyed.get(i)
+                    && let Some(destroyed_handler) =
+                        &particle_settings.event_handlers.particles_destroyed
                 {
                     commands.command_scope(|mut cmds| {
                         cmds.run_system_with(*destroyed_handler, destroyed);
@@ -650,7 +673,7 @@ pub fn notify_finished_particle_spawners(
                 .emission_settings
                 .iter()
                 .all(|e| e.emission_pacing.is_one_shot())
-            && !data.enabled
+            && !data.active()
             && data.initialized
             && !data.finished_notified
         {
