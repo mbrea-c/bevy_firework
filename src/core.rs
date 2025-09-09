@@ -293,8 +293,9 @@ impl ParticleSpawnerData {
 
         for emission in &self.emission {
             if emission.emits_on_other_particles {
-                enabled |= emission.enabled
-                    && self.particles.iter().any(|particles| !particles.is_empty());
+                let does_any_particle_type_have_particles =
+                    self.particles.iter().any(|particles| !particles.is_empty());
+                enabled |= emission.enabled && does_any_particle_type_have_particles;
             } else {
                 enabled |= emission.enabled;
             }
@@ -665,14 +666,10 @@ pub fn update_particles(
 /// particle system has "finished" (spawned all particles and they have all expired).
 pub fn notify_finished_particle_spawners(
     mut commands: Commands,
-    mut particle_systems_query: Query<(Entity, &ParticleSpawner, &mut ParticleSpawnerData)>,
+    mut particle_systems_query: Query<(Entity, &mut ParticleSpawnerData)>,
 ) {
-    for (entity, settings, mut data) in &mut particle_systems_query {
+    for (entity, mut data) in &mut particle_systems_query {
         if data.particles.iter().all(|i| i.is_empty())
-            && settings
-                .emission_settings
-                .iter()
-                .all(|e| e.emission_pacing.is_one_shot())
             && !data.active()
             && data.initialized
             && !data.finished_notified
