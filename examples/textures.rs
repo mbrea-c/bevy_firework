@@ -154,6 +154,7 @@ fn setup(
             ],
             starts_enabled: true,
             spawn_transform_mode: SpawnTransformMode::Local,
+            ..default()
         },
         Transform {
             translation: Vec3::new(-2., 2., 0.),
