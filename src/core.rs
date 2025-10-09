@@ -340,7 +340,7 @@ impl Default for EffectModifier {
 
 #[derive(EntityEvent)]
 pub struct ParticleSpawnerFinished {
-    pub entity: Entity,
+    entity: Entity,
 }
 
 pub fn sync_spawner_data(

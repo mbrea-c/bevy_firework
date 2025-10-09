@@ -147,7 +147,7 @@ fn setup(
                             ))
                             .observe(
                                 |trigger: On<ParticleSpawnerFinished>, mut commands: Commands| {
-                                    commands.entity(trigger.event().entity).despawn();
+                                    commands.entity(trigger.event_target()).despawn();
                                 },
                             );
                     });
