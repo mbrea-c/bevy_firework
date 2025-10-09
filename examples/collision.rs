@@ -1,5 +1,5 @@
 use avian3d::prelude::*;
-use bevy::{core_pipeline::bloom::Bloom, prelude::*};
+use bevy::{post_process::bloom::Bloom, prelude::*, render::view::Hdr};
 use bevy_firework::{
     core::{
         BlendMode, EmissionPacing, EmissionSettings, ParticleCollisionSettings, ParticleSettings,
@@ -122,10 +122,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Camera {
-            hdr: true,
-            ..default()
-        },
+        Hdr,
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         Bloom::default(),
         // For now,Msaa must be disabled on the web due to this:

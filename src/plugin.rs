@@ -8,7 +8,7 @@ use super::{
     render,
 };
 use bevy::{
-    asset::{load_internal_asset, weak_handle},
+    asset::{load_internal_asset, uuid_handle},
     ecs::{intern::Interned, schedule::ScheduleLabel},
     prelude::*,
 };
@@ -17,7 +17,7 @@ use bevy::{
 use super::core::sync_parent_velocity;
 
 pub const PARTICLE_SHADER_HANDLE: Handle<Shader> =
-    weak_handle!("bdd76c4f-ce8a-45e4-a8d9-7f0470bed2f8");
+    uuid_handle!("bdd76c4f-ce8a-45e4-a8d9-7f0470bed2f8");
 
 pub struct ParticleSystemPlugin {
     pub update_schedule: Interned<dyn ScheduleLabel>,

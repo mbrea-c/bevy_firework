@@ -2,7 +2,7 @@ use crate::curve::{FireworkCurve, FireworkGradient};
 
 use super::emission_shape::EmissionShape;
 use bevy::{
-    asset::weak_handle, ecs::system::SystemId, prelude::*, render::batching::NoAutomaticBatching,
+    asset::uuid_handle, ecs::system::SystemId, prelude::*, render::batching::NoAutomaticBatching,
 };
 use bevy_utilitarian::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "physics_avian")]
 use avian3d::prelude::*;
 
-pub const DEFAULT_MESH: Handle<Mesh> = weak_handle!("ba671aee-04f4-485d-9d1e-ad7053dacfab");
+pub const DEFAULT_MESH: Handle<Mesh> = uuid_handle!("ba671aee-04f4-485d-9d1e-ad7053dacfab");
 
 #[derive(Debug, Clone, Copy, PartialEq, Reflect, Serialize, Deserialize)]
 pub enum EmissionPacing {
@@ -338,8 +338,10 @@ impl Default for EffectModifier {
     }
 }
 
-#[derive(Event)]
-pub struct ParticleSpawnerFinished;
+#[derive(EntityEvent)]
+pub struct ParticleSpawnerFinished {
+    entity: Entity,
+}
 
 pub fn sync_spawner_data(
     mut spawners: Query<(&ParticleSpawner, &mut ParticleSpawnerData), Changed<ParticleSpawner>>,
@@ -674,7 +676,8 @@ pub fn notify_finished_particle_spawners(
             && data.initialized
             && !data.finished_notified
         {
-            commands.trigger_targets(ParticleSpawnerFinished, entity);
+            commands.trigger(ParticleSpawnerFinished { entity });
+            // commands.trigger_targets(ParticleSpawnerFinished, entity);
             data.finished_notified = true;
         }
     }
