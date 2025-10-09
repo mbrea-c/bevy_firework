@@ -1,10 +1,9 @@
 use avian3d::prelude::{
-    Collider, CollisionEventsEnabled, Collisions, Friction, LinearVelocity, OnCollisionStart,
-    Position, Restitution, RigidBody, Rotation,
+    Collider, CollisionEventsEnabled, CollisionStart, Collisions, Friction, LinearVelocity,
+    OnCollisionStart, Position, Restitution, RigidBody, Rotation,
 };
 use bevy::{
-    core_pipeline::{bloom::Bloom, prepass::DepthPrepass},
-    prelude::*,
+    core_pipeline::prepass::DepthPrepass, post_process::bloom::Bloom, prelude::*, render::view::Hdr,
 };
 use bevy_firework::{
     core::{
@@ -74,26 +73,29 @@ fn setup(
             CollisionEventsEnabled,
         ))
         .observe(
-            |trigger: Trigger<OnCollisionStart>,
+            |trigger: On<CollisionStart>,
              mut commands: Commands,
              collisions: Collisions,
              collider: Query<(&Position, &Rotation)>| {
                 collisions
-                    .collisions_with(trigger.collider)
+                    .collisions_with(trigger.collider1)
                     .for_each(|pair| {
-                        let (impulse, mut normal) = pair.max_normal_impulse();
-                        if pair.collider1 != trigger.collider {
+                        let (impulse, mut normal) = (
+                            pair.max_normal_impulse_magnitude(),
+                            pair.max_normal_impulse(),
+                        );
+                        if pair.collider1 != trigger.collider1 {
                             normal = -normal;
                         }
 
-                        let Ok((position, rotation)) = collider.get(trigger.collider) else {
+                        let Ok((position, rotation)) = collider.get(trigger.collider1) else {
                             return;
                         };
                         let translation = pair.find_deepest_contact().map_or(Vec3::ZERO, |c| {
-                            if pair.collider1 == trigger.collider {
-                                c.global_point1(position, rotation)
+                            if pair.collider1 == trigger.collider1 {
+                                c.anchor1
                             } else {
-                                c.global_point2(position, rotation)
+                                c.anchor2
                             }
                         });
 
@@ -144,9 +146,8 @@ fn setup(
                                 },
                             ))
                             .observe(
-                                |trigger: Trigger<ParticleSpawnerFinished>,
-                                 mut commands: Commands| {
-                                    commands.entity(trigger.target()).despawn();
+                                |trigger: On<ParticleSpawnerFinished>, mut commands: Commands| {
+                                    commands.entity(trigger.event().entity).despawn();
                                 },
                             );
                     });
@@ -166,10 +167,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Camera {
-            hdr: true,
-            ..default()
-        },
+        Hdr,
         Transform::from_xyz(-2.5, 10., 4.0).looking_at(Vec3::new(0., -3., 0.), Vec3::Y),
         Bloom::default(),
         DepthPrepass::default(),

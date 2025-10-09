@@ -340,7 +340,7 @@ impl Default for EffectModifier {
 
 #[derive(EntityEvent)]
 pub struct ParticleSpawnerFinished {
-    entity: Entity,
+    pub entity: Entity,
 }
 
 pub fn sync_spawner_data(
@@ -699,7 +699,7 @@ pub fn propagate_particle_spawner_modifier(
 }
 
 pub fn setup_default_mesh(mut meshes: ResMut<Assets<Mesh>>) {
-    meshes.insert(
+    let _ = meshes.insert(
         &mut DEFAULT_MESH.clone(),
         Rectangle::from_size(Vec2::new(1., 1.)).mesh().into(),
     );
