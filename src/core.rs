@@ -673,7 +673,6 @@ pub fn notify_finished_particle_spawners(
             && !data.finished_notified
         {
             commands.trigger(ParticleSpawnerFinished { entity });
-            // commands.trigger_targets(ParticleSpawnerFinished, entity);
             data.finished_notified = true;
         }
     }
