@@ -1,6 +1,6 @@
 use avian3d::prelude::{
     Collider, CollisionEventsEnabled, CollisionStart, Collisions, Friction, LinearVelocity,
-    OnCollisionStart, Position, Restitution, RigidBody, Rotation,
+    Restitution, RigidBody,
 };
 use bevy::{
     core_pipeline::prepass::DepthPrepass, post_process::bloom::Bloom, prelude::*, render::view::Hdr,
@@ -73,31 +73,20 @@ fn setup(
             CollisionEventsEnabled,
         ))
         .observe(
-            |trigger: On<CollisionStart>,
-             mut commands: Commands,
-             collisions: Collisions,
-             collider: Query<(&Position, &Rotation)>| {
+            |trigger: On<CollisionStart>, mut commands: Commands, collisions: Collisions| {
                 collisions
                     .collisions_with(trigger.collider1)
                     .for_each(|pair| {
                         let (impulse, mut normal) = (
                             pair.max_normal_impulse_magnitude(),
-                            pair.max_normal_impulse(),
+                            pair.max_normal_impulse().normalize_or_zero(),
                         );
-                        if pair.collider1 != trigger.collider1 {
+                        if pair.collider1 == trigger.collider1 {
                             normal = -normal;
                         }
 
-                        let Ok((position, rotation)) = collider.get(trigger.collider1) else {
-                            return;
-                        };
-                        let translation = pair.find_deepest_contact().map_or(Vec3::ZERO, |c| {
-                            if pair.collider1 == trigger.collider1 {
-                                c.anchor1
-                            } else {
-                                c.anchor2
-                            }
-                        });
+                        let translation =
+                            pair.find_deepest_contact().map_or(Vec3::ZERO, |c| c.point);
 
                         commands
                             .spawn((
