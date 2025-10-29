@@ -1,4 +1,4 @@
-use crate::core::{notify_finished_particle_spawners, setup_default_mesh};
+use crate::core::notify_finished_particle_spawners;
 
 use super::{
     core::{
@@ -43,7 +43,6 @@ impl Plugin for ParticleSystemPlugin {
         app //
             .register_type::<ParticleSpawner>()
             .add_plugins(render::CustomMaterialPlugin)
-            .add_systems(Startup, setup_default_mesh)
             .add_systems(
                 self.update_schedule,
                 (
