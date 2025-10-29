@@ -3,7 +3,7 @@
 //! ejected shells from a gun in a shooter game; this will be more efficient than creating a new
 //! particle system every time, and simpler than manually restarting a long-living one-shot particle system.
 
-use bevy::{core_pipeline::bloom::Bloom, prelude::*};
+use bevy::{post_process::bloom::Bloom, prelude::*, render::view::Hdr};
 use bevy_firework::{
     core::{
         BlendMode, EmissionPacing, EmissionSettings, ParticleSettings, ParticleSpawner,
@@ -108,10 +108,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Camera {
-            hdr: true,
-            ..default()
-        },
+        Hdr,
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         Bloom::default(),
         // For now,Msaa must be disabled on the web due to this:

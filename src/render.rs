@@ -1,7 +1,10 @@
+use std::ops::Deref;
+
 use crate::plugin::PARTICLE_SHADER_HANDLE;
 
 use super::core::{ParticleData, ParticleSpawner, ParticleSpawnerData};
 use bevy::{
+    camera::{primitives::Aabb, visibility::RenderLayers},
     core_pipeline::{
         core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d},
         prepass::{
@@ -9,16 +12,17 @@ use bevy::{
         },
     },
     ecs::system::{SystemParamItem, lifetimeless::*},
+    light::ShadowFilteringMethod,
+    mesh::VertexBufferLayout,
     pbr::{
         MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshViewBindGroup,
-        ShadowFilteringMethod,
+        SetMeshViewBindingArrayBindGroup,
     },
     platform::collections::HashMap,
     prelude::*,
     render::{
-        Extract, Render, RenderApp, RenderSet,
+        Extract, Render, RenderApp, RenderSystems,
         extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
-        primitives::Aabb,
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
@@ -28,7 +32,7 @@ use bevy::{
         renderer::RenderDevice,
         sync_world::MainEntity,
         texture::GpuImage,
-        view::{ExtractedView, RenderLayers, ViewTarget},
+        view::{ExtractedView, ViewTarget},
     },
 };
 use bytemuck::{Pod, Zeroable};
@@ -45,7 +49,6 @@ impl Plugin for CustomMaterialPlugin {
 
         render_app
             .add_render_command::<Transparent3d, DrawCustom>()
-            .init_resource::<SpecializedRenderPipelines<FireworkPipeline>>()
             .add_systems(
                 ExtractSchedule,
                 (cleanup_firework_components, extract_firework_components).chain(),
@@ -55,9 +58,9 @@ impl Plugin for CustomMaterialPlugin {
                 (
                     ensure_dummy_textures_exist,
                     (
-                        queue_custom.in_set(RenderSet::QueueMeshes),
-                        prepare_instance_buffers.in_set(RenderSet::PrepareResources),
-                        prepare_firework_bindgroup.in_set(RenderSet::PrepareBindGroups),
+                        queue_custom.in_set(RenderSystems::QueueMeshes),
+                        prepare_instance_buffers.in_set(RenderSystems::PrepareResources),
+                        prepare_firework_bindgroup.in_set(RenderSystems::PrepareBindGroups),
                     ),
                 )
                     .chain(),
@@ -67,8 +70,8 @@ impl Plugin for CustomMaterialPlugin {
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
 
-        render_app.insert_resource(FireworkUniformBindgroupLayouts::default());
-        render_app.insert_resource(FireworkPipelines::default());
+        render_app.init_resource::<FireworkUniformBindgroupLayouts>();
+        render_app.init_resource::<FireworkPipeline>();
     }
 }
 
@@ -236,14 +239,15 @@ pub struct InstanceBuffer {
     length: usize,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct FireworkUniformBindgroupLayouts {
-    pub layouts: HashMap<u32, BindGroupLayout>,
+    pub layout: BindGroupLayout,
+    pub layout_msaa: BindGroupLayout,
 }
 
 impl FireworkUniformBindgroupLayouts {
-    pub fn ensure_created(&mut self, render_device: &RenderDevice, msaa_samples: u32) {
-        let layout = render_device.create_bind_group_layout(
+    fn create_bind_group(render_device: &RenderDevice, msaa_enabled: bool) -> BindGroupLayout {
+        render_device.create_bind_group_layout(
             Some("Firework Uniform Layout"),
             &[
                 BindGroupLayoutEntry {
@@ -263,7 +267,7 @@ impl FireworkUniformBindgroupLayouts {
                     ty: BindingType::Texture {
                         sample_type: TextureSampleType::Depth,
                         view_dimension: TextureViewDimension::D2,
-                        multisampled: msaa_samples > 1,
+                        multisampled: msaa_enabled,
                     },
                     count: None,
                 },
@@ -322,13 +326,18 @@ impl FireworkUniformBindgroupLayouts {
                     count: None,
                 },
             ],
-        );
-
-        self.layouts.insert(msaa_samples, layout);
+        )
     }
+}
 
-    pub fn get(&self, msaa_samples: u32) -> &BindGroupLayout {
-        self.layouts.get(&msaa_samples).unwrap()
+impl FromWorld for FireworkUniformBindgroupLayouts {
+    fn from_world(world: &mut World) -> Self {
+        let render_device = world.resource::<RenderDevice>();
+
+        Self {
+            layout: Self::create_bind_group(render_device, false),
+            layout_msaa: Self::create_bind_group(render_device, true),
+        }
     }
 }
 
@@ -449,11 +458,7 @@ fn extract_firework_components(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn queue_custom(
     transparent_3d_draw_functions: Res<DrawFunctions<Transparent3d>>,
-    mut firework_uniform_layouts: ResMut<FireworkUniformBindgroupLayouts>,
-    mut firework_pipelines: ResMut<FireworkPipelines>,
-    render_device: Res<RenderDevice>,
-    mesh_pipeline: Res<MeshPipeline>,
-    mut pipelines: ResMut<SpecializedRenderPipelines<FireworkPipeline>>,
+    mut firework_pipeline: ResMut<FireworkPipeline>,
     pipeline_cache: Res<PipelineCache>,
     render_mesh_instances: Res<RenderMeshInstances>,
     particle_materials: Query<(
@@ -475,7 +480,7 @@ fn queue_custom(
         ),
         Option<&RenderLayers>,
     )>,
-) {
+) -> Result<()> {
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
 
     for (
@@ -486,14 +491,6 @@ fn queue_custom(
         render_layers,
     ) in &mut views
     {
-        firework_uniform_layouts.ensure_created(&render_device, msaa.samples());
-        let bindgroup_layout = firework_uniform_layouts.get(msaa.samples());
-        firework_pipelines.ensure_created(
-            msaa.samples(),
-            mesh_pipeline.clone(),
-            bindgroup_layout.clone(),
-        );
-        let custom_pipeline = firework_pipelines.get(msaa.samples());
         let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
         let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
         else {
@@ -564,7 +561,9 @@ fn queue_custom(
                 key |= MeshPipelineKey::DEFERRED_PREPASS;
             }
 
-            let pipeline = pipelines.specialize(&pipeline_cache, custom_pipeline, key);
+            let pipeline = firework_pipeline
+                .variants
+                .specialize(&pipeline_cache, FireworkPipelineKey(key))?;
             transparent_phase.add(Transparent3d {
                 entity: (entity, *main_entity),
                 pipeline,
@@ -576,6 +575,8 @@ fn queue_custom(
             });
         }
     }
+
+    Ok(())
 }
 
 fn prepare_instance_buffers(
@@ -611,7 +612,11 @@ pub fn prepare_firework_bindgroup(
         for (item_entity, firework_images) in &item_query {
             let mut bindgroups = HashMap::new();
             for (view_entity, msaa, view_prepass_textures_opt) in &view_query {
-                let bindgroup_layout = firework_uniform_layouts.get(msaa.samples());
+                let bindgroup_layout = if msaa.samples() > 0 {
+                    &firework_uniform_layouts.layout_msaa
+                } else {
+                    &firework_uniform_layouts.layout
+                };
 
                 dummy_depth_textures.ensure_has_samples(msaa.samples(), &render_device);
 
@@ -702,7 +707,7 @@ fn update_aabbs(mut query: Query<(&mut Aabb, &GlobalTransform, &ParticleSpawnerD
         let center = (min + max) / 2.;
         let half_extents = (max - min) / 2.;
         aabb.center = global_transform
-            .compute_matrix()
+            .to_matrix()
             .inverse()
             .transform_point3(center)
             .into();
@@ -710,92 +715,39 @@ fn update_aabbs(mut query: Query<(&mut Aabb, &GlobalTransform, &ParticleSpawnerD
     }
 }
 
-#[derive(Resource, Default)]
-pub struct FireworkPipelines {
-    /// One pipeline per MSAA sample count
-    /// will be initialize during "prepare" stage
-    pipelines: HashMap<u32, FireworkPipeline>,
-}
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub struct FireworkPipelineKey(pub MeshPipelineKey);
 
-impl FireworkPipelines {
-    pub fn ensure_created(
-        &mut self,
-        msaa_samples: u32,
-        mesh_pipeline: MeshPipeline,
-        uniform_layout: BindGroupLayout,
-    ) {
-        let vertex_shader = PARTICLE_SHADER_HANDLE;
+impl Deref for FireworkPipelineKey {
+    type Target = MeshPipelineKey;
 
-        self.pipelines.insert(
-            msaa_samples,
-            FireworkPipeline {
-                vertex_shader,
-                mesh_pipeline,
-                uniform_layout,
-            },
-        );
-    }
-
-    pub fn get(&self, msaa_samples: u32) -> &FireworkPipeline {
-        self.pipelines.get(&msaa_samples).unwrap()
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
+impl SpecializerKey for FireworkPipelineKey {
+    const IS_CANONICAL: bool = true;
+
+    type Canonical = Self;
+}
+
+#[derive(Resource)]
 pub struct FireworkPipeline {
-    vertex_shader: Handle<Shader>,
-    mesh_pipeline: MeshPipeline,
-    uniform_layout: BindGroupLayout,
+    variants: Variants<RenderPipeline, FireworkSpecializer>,
 }
 
-// Added a basic Debug impl for simpler checking of the contents of the sample->pipeline map.
-impl std::fmt::Debug for FireworkPipeline {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "FireworkPipeline {{...}}")
-    }
-}
+impl FromWorld for FireworkPipeline {
+    fn from_world(world: &mut World) -> Self {
+        let mesh_pipeline = world.resource::<MeshPipeline>();
+        let bind_group_layouts = world.resource::<FireworkUniformBindgroupLayouts>();
 
-impl SpecializedRenderPipeline for FireworkPipeline {
-    type Key = MeshPipelineKey;
-
-    fn specialize(&self, key: Self::Key) -> RenderPipelineDescriptor {
-        let view_layout = self.mesh_pipeline.get_view_layout(key.into()).clone();
-        let layout = vec![view_layout, self.uniform_layout.clone()];
-        let format = if key.contains(MeshPipelineKey::HDR) {
-            ViewTarget::TEXTURE_FORMAT_HDR
-        } else {
-            TextureFormat::bevy_default()
-        };
-
-        let mut shader_defs = vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()];
-
-        let shadow_filter_method =
-            key.intersection(MeshPipelineKey::SHADOW_FILTER_METHOD_RESERVED_BITS);
-        if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_HARDWARE_2X2 {
-            shader_defs.push("SHADOW_FILTER_METHOD_HARDWARE_2X2".into());
-        } else if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN {
-            shader_defs.push("SHADOW_FILTER_METHOD_GAUSSIAN".into());
-        } else if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_TEMPORAL {
-            shader_defs.push("SHADOW_FILTER_METHOD_TEMPORAL".into());
-        }
-
-        if key.msaa_samples() > 1 {
-            shader_defs.push("MULTISAMPLED".into());
-        }
-        if key.contains(MeshPipelineKey::DEPTH_PREPASS) {
-            shader_defs.push("DEPTH_PREPASS".into());
-        }
-
-        RenderPipelineDescriptor {
+        let base_descriptor = RenderPipelineDescriptor {
             label: Some("Firework Pipeline".into()),
-            layout,
             push_constant_ranges: vec![],
             vertex: VertexState {
-                shader: self.vertex_shader.clone(),
-                // meshes typically live in bind group 2. because we are using bindgroup 1
-                // we need to add MESH_BINDGROUP_1 shader def so that the bindings are correctly
-                // linked in the shader
-                shader_defs: shader_defs.clone(),
-                entry_point: "vertex".into(),
+                shader: PARTICLE_SHADER_HANDLE.clone(),
+                entry_point: Some("vertex".into()),
                 buffers: vec![VertexBufferLayout {
                     array_stride: std::mem::size_of::<ParticleInstance>() as u64,
                     step_mode: VertexStepMode::Instance,
@@ -826,19 +778,12 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                         },
                     ],
                 }],
+                ..default()
             },
             fragment: Some(FragmentState {
-                shader: self.vertex_shader.clone(),
-                // meshes typically live in bind group 2. because we are using bindgroup 1
-                // we need to add MESH_BINDGROUP_1 shader def so that the bindings are correctly
-                // linked in the shader
-                shader_defs,
-                entry_point: "fragment".into(),
-                targets: vec![Some(ColorTargetState {
-                    format,
-                    blend: Some(BlendState::ALPHA_BLENDING),
-                    write_mask: ColorWrites::ALL,
-                })],
+                shader: PARTICLE_SHADER_HANDLE.clone(),
+                entry_point: Some("fragment".into()),
+                ..default()
             }),
             primitive: PrimitiveState::default(),
             depth_stencil: Some(DepthStencilState {
@@ -850,19 +795,100 @@ impl SpecializedRenderPipeline for FireworkPipeline {
                 bias: DepthBiasState::default(),
             }),
             multisample: MultisampleState {
-                count: key.msaa_samples(),
                 mask: !0,
                 alpha_to_coverage_enabled: false,
+                ..default()
             },
             zero_initialize_workgroup_memory: true,
+            ..default()
+        };
+
+        let variants = Variants::new(
+            FireworkSpecializer {
+                uniform_layout: bind_group_layouts.layout.clone().clone(),
+                uniform_layout_msaa: bind_group_layouts.layout_msaa.clone().clone(),
+                mesh_pipeline: mesh_pipeline.clone(),
+            },
+            base_descriptor,
+        );
+
+        Self { variants }
+    }
+}
+
+pub struct FireworkSpecializer {
+    mesh_pipeline: MeshPipeline,
+    uniform_layout: BindGroupLayout,
+    uniform_layout_msaa: BindGroupLayout,
+}
+
+impl Specializer<RenderPipeline> for FireworkSpecializer {
+    type Key = FireworkPipelineKey;
+
+    fn specialize(
+        &self,
+        key: Self::Key,
+        descriptor: &mut <RenderPipeline as Specializable>::Descriptor,
+    ) -> Result<Canonical<Self::Key>> {
+        let view_layout = self.mesh_pipeline.get_view_layout(key.0.into()).clone();
+        let uniform_layout = if key.msaa_samples() > 0 {
+            self.uniform_layout_msaa.clone()
+        } else {
+            self.uniform_layout.clone()
+        };
+        descriptor.layout = vec![
+            view_layout.main_layout.clone(),
+            view_layout.binding_array_layout.clone(),
+            uniform_layout,
+        ];
+
+        let format = if key.contains(MeshPipelineKey::HDR) {
+            ViewTarget::TEXTURE_FORMAT_HDR
+        } else {
+            TextureFormat::bevy_default()
+        };
+
+        let mut shader_defs = vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()];
+
+        let shadow_filter_method =
+            key.intersection(MeshPipelineKey::SHADOW_FILTER_METHOD_RESERVED_BITS);
+        if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_HARDWARE_2X2 {
+            shader_defs.push("SHADOW_FILTER_METHOD_HARDWARE_2X2".into());
+        } else if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN {
+            shader_defs.push("SHADOW_FILTER_METHOD_GAUSSIAN".into());
+        } else if shadow_filter_method == MeshPipelineKey::SHADOW_FILTER_METHOD_TEMPORAL {
+            shader_defs.push("SHADOW_FILTER_METHOD_TEMPORAL".into());
         }
+
+        if key.msaa_samples() > 1 {
+            shader_defs.push("MULTISAMPLED".into());
+        }
+        if key.contains(MeshPipelineKey::DEPTH_PREPASS) {
+            shader_defs.push("DEPTH_PREPASS".into());
+        }
+
+        descriptor.vertex.shader_defs = shader_defs.clone();
+
+        descriptor.fragment.iter_mut().for_each(|fragment| {
+            fragment.targets = vec![Some(ColorTargetState {
+                format,
+                blend: Some(BlendState::ALPHA_BLENDING),
+                write_mask: ColorWrites::ALL,
+            })];
+            fragment.shader_defs = shader_defs.clone();
+        });
+
+        descriptor.multisample.count = key.0.msaa_samples();
+
+        Ok(key)
     }
 }
 
 type DrawCustom = (
     SetItemPipeline,
     SetMeshViewBindGroup<0>,
-    SetFireworkBindGroup<1>,
+    SetMeshViewBindingArrayBindGroup<1>,
+    SetFireworkBindGroup<2>,
     DrawFirework,
 );
 
@@ -875,10 +901,10 @@ impl<const I: usize, P: PhaseItem> RenderCommand<P> for SetFireworkBindGroup<I> 
         &'static FireworkUniformBindgroups,
     );
 
-    fn render<'w>(
+    fn render<'w, 's>(
         _item: &P,
-        view_entity: bevy::ecs::query::ROQueryItem<'w, Self::ViewQuery>,
-        item_query: bevy::ecs::query::ROQueryItem<'w, Option<Self::ItemQuery>>,
+        view_entity: bevy::ecs::query::ROQueryItem<'w, 's, Self::ViewQuery>,
+        item_query: bevy::ecs::query::ROQueryItem<'w, 's, Option<Self::ItemQuery>>,
         _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {

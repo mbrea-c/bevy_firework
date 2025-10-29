@@ -1,8 +1,9 @@
 use avian3d::{PhysicsPlugins, prelude::Collider, spatial_query::SpatialQueryFilter};
 use bevy::{
-    core_pipeline::bloom::Bloom,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    post_process::bloom::Bloom,
     prelude::*,
+    render::view::Hdr,
 };
 use bevy_firework::{
     core::{
@@ -162,11 +163,7 @@ fn setup(
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-        Camera {
-            hdr: true,
-
-            ..default()
-        },
+        Hdr,
         Bloom::default(),
         // For now,Msaa must be disabled on the web due to this:
         // https://github.com/gfx-rs/wgpu/issues/5263

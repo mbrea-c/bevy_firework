@@ -1,6 +1,5 @@
 use bevy::{
-    core_pipeline::{bloom::Bloom, prepass::DepthPrepass},
-    prelude::*,
+    core_pipeline::prepass::DepthPrepass, post_process::bloom::Bloom, prelude::*, render::view::Hdr,
 };
 use bevy_firework::{
     core::{BlendMode, EmissionPacing, EmissionSettings, ParticleSettings, ParticleSpawner},
@@ -104,10 +103,7 @@ fn setup(
     // camera
     commands.spawn((
         Camera3d::default(),
-        Camera {
-            hdr: true,
-            ..default()
-        },
+        Hdr,
         Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
         Bloom::default(),
         DepthPrepass::default(),

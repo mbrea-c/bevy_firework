@@ -45,27 +45,27 @@ struct FireworkUniform {
     padding: vec3<f32>,
 }
 
-@group(1) @binding(0) var<uniform> firework_uniform: FireworkUniform;
+@group(2) @binding(0) var<uniform> firework_uniform: FireworkUniform;
 
 #ifdef DEPTH_PREPASS
 #ifdef MULTISAMPLED
-@group(1) @binding(1) var depth_prepass_texture: texture_depth_multisampled_2d;
+@group(2) @binding(1) var depth_prepass_texture: texture_depth_multisampled_2d;
 #else // MULTISAMPLED
-@group(1) @binding(1) var depth_prepass_texture: texture_depth_2d;
+@group(2) @binding(1) var depth_prepass_texture: texture_depth_2d;
 #endif // MULTISAMPLED
 #endif // DEPTH_PREPASS
 
-@group(1) @binding(2)
+@group(2) @binding(2)
 var base_color_texture_sampler: sampler;
-@group(1) @binding(3)
+@group(2) @binding(3)
 var base_color_texture: texture_2d<f32>;
-@group(1) @binding(4)
+@group(2) @binding(4)
 var normal_map_texture_sampler: sampler;
-@group(1) @binding(5)
+@group(2) @binding(5)
 var normal_map_texture: texture_2d<f32>;
-@group(1) @binding(6)
+@group(2) @binding(6)
 var orm_texture_sampler: sampler;
-@group(1) @binding(7)
+@group(2) @binding(7)
 var orm_texture: texture_2d<f32>;
 
 
