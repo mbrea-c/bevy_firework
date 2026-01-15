@@ -241,14 +241,14 @@ pub struct InstanceBuffer {
 
 #[derive(Resource)]
 pub struct FireworkUniformBindgroupLayouts {
-    pub layout: BindGroupLayout,
-    pub layout_msaa: BindGroupLayout,
+    pub layout: BindGroupLayoutDescriptor,
+    pub layout_msaa: BindGroupLayoutDescriptor,
 }
 
 impl FireworkUniformBindgroupLayouts {
-    fn create_bind_group(render_device: &RenderDevice, msaa_enabled: bool) -> BindGroupLayout {
-        render_device.create_bind_group_layout(
-            Some("Firework Uniform Layout"),
+    fn create_bind_group(msaa_enabled: bool) -> BindGroupLayoutDescriptor {
+        BindGroupLayoutDescriptor::new(
+            "Firework Uniform Layout",
             &[
                 BindGroupLayoutEntry {
                     binding: 0,
@@ -331,12 +331,10 @@ impl FireworkUniformBindgroupLayouts {
 }
 
 impl FromWorld for FireworkUniformBindgroupLayouts {
-    fn from_world(world: &mut World) -> Self {
-        let render_device = world.resource::<RenderDevice>();
-
+    fn from_world(_: &mut World) -> Self {
         Self {
-            layout: Self::create_bind_group(render_device, false),
-            layout_msaa: Self::create_bind_group(render_device, true),
+            layout: Self::create_bind_group(false),
+            layout_msaa: Self::create_bind_group(true),
         }
     }
 }
@@ -568,7 +566,7 @@ fn queue_custom(
                 entity: (entity, *main_entity),
                 pipeline,
                 draw_function: draw_custom,
-                distance: rangefinder.distance_translation(&mesh_instance.translation),
+                distance: rangefinder.distance(&mesh_instance.center),
                 batch_range: 0..1,
                 extra_index: PhaseItemExtraIndex::None,
                 indexed: true,
@@ -603,6 +601,7 @@ pub fn prepare_firework_bindgroup(
     render_device: Res<RenderDevice>,
     firework_uniform_layouts: Res<FireworkUniformBindgroupLayouts>,
     firework_uniforms: Res<ComponentUniforms<FireworkUniform>>,
+    pipeline_cache: Res<PipelineCache>,
     mut dummy_depth_textures: ResMut<DummyTextures>,
     view_query: Query<(Entity, &Msaa, Option<&ViewPrepassTextures>), With<ViewTarget>>,
     item_query: Query<(Entity, &FireworkImages), With<FireworkRenderEntityMarker>>,
@@ -674,7 +673,7 @@ pub fn prepare_firework_bindgroup(
                     view_entity,
                     render_device.create_bind_group(
                         "Firework Uniform Bindgroup",
-                        bindgroup_layout,
+                        &pipeline_cache.get_bind_group_layout(bindgroup_layout),
                         &entries,
                     ),
                 );
@@ -818,8 +817,8 @@ impl FromWorld for FireworkPipeline {
 
 pub struct FireworkSpecializer {
     mesh_pipeline: MeshPipeline,
-    uniform_layout: BindGroupLayout,
-    uniform_layout_msaa: BindGroupLayout,
+    uniform_layout: BindGroupLayoutDescriptor,
+    uniform_layout_msaa: BindGroupLayoutDescriptor,
 }
 
 impl Specializer<RenderPipeline> for FireworkSpecializer {
