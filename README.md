@@ -1,4 +1,5 @@
-![Crates.io](https://img.shields.io/crates/v/bevy_firework) ![Crates.io](https://img.shields.io/crates/d/bevy_firework)
+![Crates.io](https://img.shields.io/crates/v/bevy_firework)
+![Crates.io](https://img.shields.io/crates/d/bevy_firework)
 [![CI](https://github.com/mbrea-c/bevy_firework/actions/workflows/ci.yaml/badge.svg)](https://github.com/mbrea-c/bevy_firework/actions/workflows/ci.yaml)
 
 # Bevy Firework 🎆
@@ -9,9 +10,10 @@ rendered in a single draw call (rather than one per particle).
 
 While not as fast as a pure GPU-based particle system, this provides a massive
 speed-up from the naive approach to CPU-based particles (making it possible to
-render tens of thousands of particles without noticeable framerate drops) and maintains
-much of the flexibility of CPU-based particle systems (e.g. easy access to
-physics data for particle collision, simplified particle system animation).
+render tens of thousands of particles without noticeable framerate drops) and
+maintains much of the flexibility of CPU-based particle systems (e.g. easy
+access to physics data for particle collision, simplified particle system
+animation).
 
 ![collision example](https://github.com/mbrea-c/bevy_firework/assets/31567043/11122ee3-3b66-4d18-8afd-3e7b1cb3b617)
 ![pbr example](/pbr_example.jpg) ![sparks example](/sparks_example.jpg)
@@ -19,6 +21,8 @@ physics data for particle collision, simplified particle system animation).
 ## Current features
 
 - _Billboarded_ particles.
+- Particle textures: you can add base color, normal map, metallic and roughness
+  textures to particles.
 - Configurable integration with Bevy's PBR rendering (i.e. particles can receive
   shadows, are affected by fog and lighting changes).
 - Particle collision with arbitrary `avian` colliders.
@@ -39,6 +43,9 @@ physics data for particle collision, simplified particle system animation).
   - Disk
   - Sphere
 - One-shot emission mode, or continuous emission.
+- Nested emission: you can configure particles to be emitted from instances of
+  other kind of particles, such as smoke particles emitted from flying debris
+  particles.
 
 ## Current limitations
 
@@ -46,13 +53,15 @@ physics data for particle collision, simplified particle system animation).
 
 ## Version table
 
-| `bevy_firework` | `bevy` | `bevy_utilitarian` | `avian`
-| --------------- | ------ | ------------------ | --------
-| 0.1             | 0.12   | 0.2                |  
-| 0.2             | 0.12   | 0.3                |
-| 0.3             | 0.13   | 0.4                |
-| 0.4             | 0.14   | 0.5                |
-| 0.5             | 0.14   | 0.5                | 0.1
-| 0.6             | 0.15   | 0.6                | 0.2
-| 0.7             | 0.16   | 0.7                | 0.3
-| main            | 0.16   | 0.7                | 0.3
+| `bevy_firework` | `bevy` | `bevy_utilitarian` | `avian`  |
+| --------------- | ------ | ------------------ | -------- |
+| 0.1 | 0.12 | 0.2 | |
+| 0.2 | 0.12 | 0.3 | |
+| 0.3 | 0.13 | 0.4 | |
+| 0.4 | 0.14 | 0.5 | |
+| 0.5 | 0.14 | 0.5 | 0.1 |
+| 0.6 | 0.15 | 0.6 | 0.2 |
+| 0.7 | 0.16 | 0.7 | 0.3 |
+| 0.8 | 0.17 | 0.8 | 0.4 |
+| 0.9 | 0.18 | 0.9 | 0.5 |
+| main | 0.18 | 0.9 | 0.9|
