@@ -611,7 +611,7 @@ pub fn prepare_firework_bindgroup(
         for (item_entity, firework_images) in &item_query {
             let mut bindgroups = HashMap::new();
             for (view_entity, msaa, view_prepass_textures_opt) in &view_query {
-                let bindgroup_layout = if msaa.samples() > 0 {
+                let bindgroup_layout = if msaa.samples() > 1 {
                     &firework_uniform_layouts.layout_msaa
                 } else {
                     &firework_uniform_layouts.layout
@@ -830,7 +830,7 @@ impl Specializer<RenderPipeline> for FireworkSpecializer {
         descriptor: &mut <RenderPipeline as Specializable>::Descriptor,
     ) -> Result<Canonical<Self::Key>> {
         let view_layout = self.mesh_pipeline.get_view_layout(key.0.into()).clone();
-        let uniform_layout = if key.msaa_samples() > 0 {
+        let uniform_layout = if key.msaa_samples() > 1 {
             self.uniform_layout_msaa.clone()
         } else {
             self.uniform_layout.clone()
