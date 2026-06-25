@@ -19,7 +19,7 @@ bevy = { version = "0.18", default-features = false, features = [
     "zstd_rust",
 ] }
 bytemuck = "1.14.3"
-rand = "0.9.1"
+rand = "0.9.3"
 bevy_utilitarian = "0.9"
 serde = { version = "1.0", features = ["derive"] }
 avian3d = { version = "0.5", features = ["serialize"], optional = true }
