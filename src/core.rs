@@ -242,6 +242,7 @@ impl Default for ParticleSpawner {
 pub struct ParticleCollisionSettings {
     pub restitution: f32,
     pub friction: f32,
+    pub destroy_on_collision: bool,
     #[reflect(ignore)]
     pub filter: SpatialQueryFilter,
 }
@@ -604,7 +605,7 @@ pub fn update_particles(
                         particle.scale = particle.initial_scale * scale_factor;
 
                         #[cfg(feature = "physics_avian")]
-                        let (new_pos, new_vel) = if let Some(collision_settigs) =
+                        let (new_pos, new_vel, should_destroy) = if let Some(collision_settigs) =
                             &particle_settings.collision_settings
                         {
                             particle_collision(
@@ -618,16 +619,24 @@ pub fn update_particles(
                             (
                                 particle.position + particle.velocity * time.delta_secs(),
                                 particle.velocity,
+                                false,
                             )
                         };
+
                         #[cfg(not(feature = "physics_avian"))]
-                        let (new_pos, new_vel) = (
+                        let (new_pos, new_vel, should_destroy) = (
                             particle.position + particle.velocity * time.delta_secs(),
                             particle.velocity,
+                            false,
                         );
 
                         particle.position = new_pos;
                         particle.velocity = new_vel;
+
+                        if should_destroy {
+                            destroyed.push(particle);
+                            return None;
+                        }
 
                         particle.velocity += (particle_settings.acceleration
                             - particle.velocity * particle_settings.linear_drag)
@@ -739,9 +748,10 @@ fn particle_collision(
     mut delta: f32,
     collision_settings: &ParticleCollisionSettings,
     spatial_query: &SpatialQuery,
-) -> (Vec3, Vec3) {
+) -> (Vec3, Vec3, bool) {
     let orig_delta = delta;
     let mut n_steps = 0;
+    let mut should_destroy = false;
     while delta > 0. && n_steps < 4 {
         if let Some(hit) = spatial_query.cast_ray(
             pos,
@@ -775,6 +785,10 @@ fn particle_collision(
                 pos += hit.normal * 0.0001;
                 delta = (delta - hit.distance).clamp(0., orig_delta);
             }
+            should_destroy = collision_settings.destroy_on_collision;
+            if should_destroy {
+                return (pos, vel, should_destroy);
+            }
         } else {
             pos += vel * delta;
             delta = 0.;
@@ -782,7 +796,7 @@ fn particle_collision(
         n_steps += 1;
     }
 
-    (pos, vel)
+    (pos, vel, should_destroy)
 }
 
 #[cfg(test)]
