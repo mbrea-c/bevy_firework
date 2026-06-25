@@ -92,6 +92,7 @@ fn setup(
                         restitution: 0.4,
                         friction: 0.35,
                         filter: SpatialQueryFilter::default(),
+                        destroy_on_collision: false,
                     }),
                     ..default()
                 },
