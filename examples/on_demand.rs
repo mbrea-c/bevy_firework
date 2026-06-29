@@ -3,7 +3,7 @@
 //! ejected shells from a gun in a shooter game; this will be more efficient than creating a new
 //! particle system every time, and simpler than manually restarting a long-living one-shot particle system.
 
-use bevy::{post_process::bloom::Bloom, prelude::*, render::view::Hdr};
+use bevy::{camera::Hdr, post_process::bloom::Bloom, prelude::*};
 use bevy_firework::{
     core::{
         BlendMode, EmissionPacing, EmissionSettings, ParticleSettings, ParticleSpawner,
@@ -40,7 +40,7 @@ fn setup(
     commands.spawn((
         Text("Press Space to toggle slow motion\nLeft click to spawn particles".to_string()),
         TextFont {
-            font_size: 40.0,
+            font_size: FontSize::Px(40.0),
             ..default()
         },
         TextColor(Color::WHITE),
@@ -99,7 +99,7 @@ fn setup(
     commands.spawn((
         PointLight {
             intensity: 1500000.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 8.0, 4.0),

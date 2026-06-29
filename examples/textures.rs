@@ -2,11 +2,11 @@ use std::f32::consts::FRAC_PI_2;
 
 use avian3d::prelude::{Collider, SpatialQueryFilter};
 use bevy::{
+    camera::Hdr,
     core_pipeline::prepass::DepthPrepass,
     image::{ImageLoaderSettings, ImageSamplerDescriptor},
     post_process::bloom::Bloom,
     prelude::*,
-    render::view::Hdr,
 };
 use bevy_firework::{
     core::{
@@ -42,7 +42,7 @@ fn setup(
     commands.spawn((
         Text("Press Space to toggle slow motion".to_string()),
         TextFont {
-            font_size: 40.0,
+            font_size: FontSize::Px(40.0),
             ..default()
         },
         TextColor(Color::WHITE),
@@ -63,26 +63,32 @@ fn setup(
                         (0.9, LinearRgba::WHITE),
                         (1., LinearRgba::WHITE.with_alpha(0.)),
                     ]),
-                    base_color_texture: Some(asset_server.load_with_settings(
-                        "textures/bullet_case/diffuse.png",
-                        |settings: &mut ImageLoaderSettings| {
-                            settings.sampler = bevy::image::ImageSampler::Descriptor(
-                                ImageSamplerDescriptor::nearest(),
-                            );
-                        },
-                    )),
-                    normal_map_texture: Some(asset_server.load_with_settings(
-                        "textures/bullet_case/normal.png",
-                        |settings: &mut ImageLoaderSettings| {
-                            settings.is_srgb = false;
-                        },
-                    )),
-                    orm_texture: Some(asset_server.load_with_settings(
-                        "textures/bullet_case/orm.png",
-                        |settings: &mut ImageLoaderSettings| {
-                            settings.is_srgb = false;
-                        },
-                    )),
+                    base_color_texture: Some(
+                        asset_server
+                            .load_builder()
+                            .with_settings(|settings: &mut ImageLoaderSettings| {
+                                settings.sampler = bevy::image::ImageSampler::Descriptor(
+                                    ImageSamplerDescriptor::nearest(),
+                                );
+                            })
+                            .load("textures/bullet_case/diffuse.png"),
+                    ),
+                    normal_map_texture: Some(
+                        asset_server
+                            .load_builder()
+                            .with_settings(|settings: &mut ImageLoaderSettings| {
+                                settings.is_srgb = false;
+                            })
+                            .load("textures/bullet_case/normal.png"),
+                    ),
+                    orm_texture: Some(
+                        asset_server
+                            .load_builder()
+                            .with_settings(|settings: &mut ImageLoaderSettings| {
+                                settings.is_srgb = false;
+                            })
+                            .load("textures/bullet_case/orm.png"),
+                    ),
                     emissive_color: FireworkGradient::constant(LinearRgba::BLACK),
                     fade_scene: 0.,
                     fade_edge: 0.,
@@ -208,7 +214,7 @@ fn setup(
     // light
     commands.spawn((
         DirectionalLight {
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 4.0, 4.0).looking_at(Vec3::ZERO, Vec3::Y),

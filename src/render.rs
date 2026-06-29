@@ -6,7 +6,7 @@ use super::core::{ParticleData, ParticleSpawner, ParticleSpawnerData};
 use bevy::{
     camera::{primitives::Aabb, visibility::RenderLayers},
     core_pipeline::{
-        core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d},
+        core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d, TransparentSortingInfo3d},
         prepass::{
             DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass, ViewPrepassTextures,
         },
@@ -15,13 +15,15 @@ use bevy::{
     light::ShadowFilteringMethod,
     mesh::VertexBufferLayout,
     pbr::{
-        MeshPipeline, MeshPipelineKey, RenderMeshInstances, SetMeshViewBindGroup,
-        SetMeshViewBindingArrayBindGroup,
+        MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
+        RenderMeshInstances, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup,
+        get_mesh_instance_world_from_local,
     },
     platform::collections::HashMap,
     prelude::*,
     render::{
-        Extract, Render, RenderApp, RenderSystems,
+        Extract, Render, RenderApp, RenderStartup, RenderSystems,
+        batching::gpu_preprocessing::BatchedInstanceBuffers,
         extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
         render_asset::RenderAssets,
         render_phase::{
@@ -65,14 +67,22 @@ impl Plugin for CustomMaterialPlugin {
                 )
                     .chain(),
             );
+
+        render_app.add_systems(
+            RenderStartup,
+            setup_mesh_pipeline_dependent_resources.after(MeshPipelineSystems),
+        );
     }
 
     fn finish(&self, app: &mut App) {
         let render_app = app.sub_app_mut(RenderApp);
 
         render_app.init_resource::<FireworkUniformBindgroupLayouts>();
-        render_app.init_resource::<FireworkPipeline>();
     }
+}
+
+fn setup_mesh_pipeline_dependent_resources(mut commands: Commands) {
+    commands.init_resource::<FireworkPipeline>();
 }
 
 fn ensure_dummy_textures_exist(
@@ -174,7 +184,7 @@ impl DummyTextures {
                 address_mode_v: AddressMode::ClampToEdge,
                 mag_filter: FilterMode::Linear,
                 min_filter: FilterMode::Linear,
-                mipmap_filter: FilterMode::Nearest,
+                mipmap_filter: MipmapFilterMode::Nearest,
                 ..Default::default()
             });
 
@@ -478,6 +488,9 @@ fn queue_custom(
         ),
         Option<&RenderLayers>,
     )>,
+    maybe_batched_instance_buffers: Option<
+        Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>,
+    >,
 ) -> Result<()> {
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
 
@@ -494,7 +507,7 @@ fn queue_custom(
         else {
             continue;
         };
-        let mut view_key = msaa_key | MeshPipelineKey::from_hdr(view.hdr);
+        let mut view_key = msaa_key | MeshPipelineKey::from_target_format(view.target_format);
 
         match maybe_shadow_filtering_method.unwrap_or(&ShadowFilteringMethod::default()) {
             ShadowFilteringMethod::Hardware2x2 => {
@@ -523,7 +536,10 @@ fn queue_custom(
                 continue;
             };
             let mut key = view_key
-                | MeshPipelineKey::from_primitive_topology(PrimitiveTopology::TriangleList);
+                | MeshPipelineKey::from_primitive_topology_and_strip_index(
+                    PrimitiveTopology::TriangleList,
+                    None,
+                );
             //key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
             match particle_material_data.alpha_mode {
                 AlphaMode::Blend => {
@@ -562,14 +578,27 @@ fn queue_custom(
             let pipeline = firework_pipeline
                 .variants
                 .specialize(&pipeline_cache, FireworkPipelineKey(key))?;
-            transparent_phase.add(Transparent3d {
+
+            let sorting_info = TransparentSortingInfo3d::Sorted {
+                mesh_center: get_mesh_instance_world_from_local(
+                    *main_entity,
+                    mesh_instance.current_uniform_index,
+                    &render_mesh_instances,
+                    maybe_batched_instance_buffers.as_deref(),
+                )
+                .translation,
+                depth_bias: 0.,
+            };
+
+            transparent_phase.add_transient(Transparent3d {
                 entity: (entity, *main_entity),
                 pipeline,
                 draw_function: draw_custom,
-                distance: rangefinder.distance(&mesh_instance.center),
+                distance: sorting_info.sort_distance(&rangefinder),
                 batch_range: 0..1,
                 extra_index: PhaseItemExtraIndex::None,
                 indexed: true,
+                sorting_info,
             });
         }
     }
@@ -743,7 +772,6 @@ impl FromWorld for FireworkPipeline {
 
         let base_descriptor = RenderPipelineDescriptor {
             label: Some("Firework Pipeline".into()),
-            push_constant_ranges: vec![],
             vertex: VertexState {
                 shader: PARTICLE_SHADER_HANDLE.clone(),
                 entry_point: Some("vertex".into()),
@@ -787,9 +815,9 @@ impl FromWorld for FireworkPipeline {
             primitive: PrimitiveState::default(),
             depth_stencil: Some(DepthStencilState {
                 format: CORE_3D_DEPTH_FORMAT,
-                depth_write_enabled: false,
+                depth_write_enabled: Some(false),
                 // Bevy uses reverse-Z, so Greater really means closer
-                depth_compare: CompareFunction::Greater,
+                depth_compare: Some(CompareFunction::Greater),
                 stencil: StencilState::default(),
                 bias: DepthBiasState::default(),
             }),
@@ -841,11 +869,7 @@ impl Specializer<RenderPipeline> for FireworkSpecializer {
             uniform_layout,
         ];
 
-        let format = if key.contains(MeshPipelineKey::HDR) {
-            ViewTarget::TEXTURE_FORMAT_HDR
-        } else {
-            TextureFormat::bevy_default()
-        };
+        let format = key.target_format();
 
         let mut shader_defs = vec!["MESH_BINDGROUP_1".into(), "VERTEX_UVS".into()];
 
@@ -907,7 +931,10 @@ impl<const I: usize, P: PhaseItem> RenderCommand<P> for SetFireworkBindGroup<I> 
         _param: SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
-        let (uniform_index, firework_uniform_bindgroups) = item_query.unwrap();
+        let Some((uniform_index, firework_uniform_bindgroups)) = item_query else {
+            warn_once!("Skipping firework bindgroup assignment");
+            return RenderCommandResult::Skip;
+        };
 
         let bindgroup = firework_uniform_bindgroups
             .bindgroups
