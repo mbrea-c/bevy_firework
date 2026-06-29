@@ -598,7 +598,7 @@ fn queue_custom(
                 batch_range: 0..1,
                 extra_index: PhaseItemExtraIndex::None,
                 indexed: true,
-                sorting_info: sorting_info,
+                sorting_info,
             });
         }
     }
