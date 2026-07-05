@@ -1,4 +1,4 @@
-use bevy::{post_process::bloom::Bloom, prelude::*, render::view::Hdr};
+use bevy::{camera::Hdr, post_process::bloom::Bloom, prelude::*};
 use bevy_firework::{
     core::{BlendMode, EmissionPacing, EmissionSettings, ParticleSettings, ParticleSpawner},
     curve::{FireworkCurve, FireworkGradient},
@@ -32,7 +32,7 @@ fn setup(
     commands.spawn((
         Text("Press Space to toggle slow motion".to_string()),
         TextFont {
-            font_size: 40.0,
+            font_size: FontSize::Px(40.0),
             ..default()
         },
         TextColor(Color::WHITE),
@@ -90,7 +90,7 @@ fn setup(
     commands.spawn((
         PointLight {
             intensity: 1500000.0,
-            shadows_enabled: true,
+            shadow_maps_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 8.0, 4.0),
