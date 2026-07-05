@@ -10,6 +10,7 @@ use bevy::{
         prepass::{
             DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass, ViewPrepassTextures,
         },
+        tonemapping::Tonemapping,
     },
     ecs::system::{SystemParamItem, lifetimeless::*},
     light::ShadowFilteringMethod,
@@ -24,6 +25,7 @@ use bevy::{
     render::{
         Extract, Render, RenderApp, RenderStartup, RenderSystems,
         batching::gpu_preprocessing::BatchedInstanceBuffers,
+        camera::ExtractedCamera,
         extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
         render_asset::RenderAssets,
         render_phase::{
@@ -478,6 +480,8 @@ fn queue_custom(
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut views: Query<(
         &ExtractedView,
+        Option<&ExtractedCamera>,
+        Option<&Tonemapping>,
         Option<&ShadowFilteringMethod>,
         &Msaa,
         (
@@ -496,6 +500,8 @@ fn queue_custom(
 
     for (
         view,
+        maybe_camera,
+        maybe_tonemapping,
         maybe_shadow_filtering_method,
         msaa,
         (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
@@ -508,6 +514,11 @@ fn queue_custom(
             continue;
         };
         let mut view_key = msaa_key | MeshPipelineKey::from_target_format(view.target_format);
+
+        // Non-HDR views tonemap in-shader, adding bindings to the view layout.
+        if !maybe_camera.is_some_and(|camera| camera.hdr) && maybe_tonemapping.is_some() {
+            view_key |= MeshPipelineKey::TONEMAP_IN_SHADER;
+        }
 
         match maybe_shadow_filtering_method.unwrap_or(&ShadowFilteringMethod::default()) {
             ShadowFilteringMethod::Hardware2x2 => {
