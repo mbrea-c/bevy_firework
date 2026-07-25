@@ -7,25 +7,20 @@ use bevy::{
     camera::{primitives::Aabb, visibility::RenderLayers},
     core_pipeline::{
         core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d, TransparentSortingInfo3d},
-        prepass::{
-            DeferredPrepass, DepthPrepass, MotionVectorPrepass, NormalPrepass, ViewPrepassTextures,
-        },
-        tonemapping::Tonemapping,
+        prepass::ViewPrepassTextures,
     },
     ecs::system::{SystemParamItem, lifetimeless::*},
-    light::ShadowFilteringMethod,
     mesh::VertexBufferLayout,
     pbr::{
-        DistanceFog, MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems,
-        MeshUniform, RenderMeshInstances, ScreenSpaceAmbientOcclusion, SetMeshViewBindGroup,
-        SetMeshViewBindingArrayBindGroup, get_mesh_instance_world_from_local,
+        MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
+        RenderMeshInstances, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup, ViewKeyCache,
+        get_mesh_instance_world_from_local,
     },
     platform::collections::HashMap,
     prelude::*,
     render::{
         Extract, Render, RenderApp, RenderStartup, RenderSystems,
         batching::gpu_preprocessing::BatchedInstanceBuffers,
-        camera::ExtractedCamera,
         extract_component::{ComponentUniforms, DynamicUniformIndex, UniformComponentPlugin},
         render_asset::RenderAssets,
         render_phase::{
@@ -478,70 +473,28 @@ fn queue_custom(
         Option<&RenderLayers>,
     )>,
     mut transparent_render_phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
-    mut views: Query<(
-        &ExtractedView,
-        Option<&ExtractedCamera>,
-        Option<&Tonemapping>,
-        Option<&ShadowFilteringMethod>,
-        &Msaa,
-        (
-            Has<NormalPrepass>,
-            Has<DepthPrepass>,
-            Has<MotionVectorPrepass>,
-            Has<DeferredPrepass>,
-        ),
-        Has<ScreenSpaceAmbientOcclusion>,
-        Has<DistanceFog>,
-        Option<&RenderLayers>,
-    )>,
+    views: Query<(&ExtractedView, Option<&RenderLayers>)>,
+    view_key_cache: Res<ViewKeyCache>,
     maybe_batched_instance_buffers: Option<
         Res<BatchedInstanceBuffers<MeshUniform, MeshInputUniform>>,
     >,
 ) -> Result<()> {
     let draw_custom = transparent_3d_draw_functions.read().id::<DrawCustom>();
 
-    for (
-        view,
-        maybe_camera,
-        maybe_tonemapping,
-        maybe_shadow_filtering_method,
-        msaa,
-        (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
-        ssao,
-        distance_fog,
-        render_layers,
-    ) in &mut views
-    {
-        let msaa_key = MeshPipelineKey::from_msaa_samples(msaa.samples());
+    for (view, render_layers) in &views {
         let Some(transparent_phase) = transparent_render_phases.get_mut(&view.retained_view_entity)
         else {
             continue;
         };
-        let mut view_key = msaa_key | MeshPipelineKey::from_target_format(view.target_format);
 
-        if ssao {
-            view_key |= MeshPipelineKey::SCREEN_SPACE_AMBIENT_OCCLUSION;
-        }
-        if distance_fog {
-            view_key |= MeshPipelineKey::DISTANCE_FOG;
-        }
-
-        // Non-HDR views tonemap in-shader, adding bindings to the view layout.
-        if !maybe_camera.is_some_and(|camera| camera.hdr) && maybe_tonemapping.is_some() {
-            view_key |= MeshPipelineKey::TONEMAP_IN_SHADER;
-        }
-
-        match maybe_shadow_filtering_method.unwrap_or(&ShadowFilteringMethod::default()) {
-            ShadowFilteringMethod::Hardware2x2 => {
-                view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_HARDWARE_2X2;
-            }
-            ShadowFilteringMethod::Gaussian => {
-                view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_GAUSSIAN;
-            }
-            ShadowFilteringMethod::Temporal => {
-                view_key |= MeshPipelineKey::SHADOW_FILTER_METHOD_TEMPORAL;
-            }
-        }
+        // We draw with `SetMeshViewBindGroup`, so our pipeline's view bind group layout has to
+        // match the one bevy built for this view exactly. Any mismatch is a wgpu validation error
+        // at draw time. That layout is derived from the per-view `MeshPipelineKey` bevy computes in
+        // `check_views_need_specialization`, so we reuse that. This is what `bevy_gizmos_render`
+        // does for the same reason.
+        let Some(&view_key) = view_key_cache.get(&view.retained_view_entity) else {
+            continue;
+        };
 
         let rangefinder = view.rangefinder3d();
         for (entity, main_entity, particle_material_data, render_layers_entity) in
@@ -580,22 +533,6 @@ fn queue_custom(
                 }
                 _ => (),
             };
-
-            if normal_prepass {
-                key |= MeshPipelineKey::NORMAL_PREPASS;
-            }
-
-            if depth_prepass {
-                key |= MeshPipelineKey::DEPTH_PREPASS;
-            }
-
-            if motion_vector_prepass {
-                key |= MeshPipelineKey::MOTION_VECTOR_PREPASS;
-            }
-
-            if deferred_prepass {
-                key |= MeshPipelineKey::DEFERRED_PREPASS;
-            }
 
             let pipeline = firework_pipeline
                 .variants
