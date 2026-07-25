@@ -16,9 +16,9 @@ use bevy::{
     light::ShadowFilteringMethod,
     mesh::VertexBufferLayout,
     pbr::{
-        MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems, MeshUniform,
-        RenderMeshInstances, SetMeshViewBindGroup, SetMeshViewBindingArrayBindGroup,
-        get_mesh_instance_world_from_local,
+        DistanceFog, MeshInputUniform, MeshPipeline, MeshPipelineKey, MeshPipelineSystems,
+        MeshUniform, RenderMeshInstances, ScreenSpaceAmbientOcclusion, SetMeshViewBindGroup,
+        SetMeshViewBindingArrayBindGroup, get_mesh_instance_world_from_local,
     },
     platform::collections::HashMap,
     prelude::*,
@@ -490,6 +490,8 @@ fn queue_custom(
             Has<MotionVectorPrepass>,
             Has<DeferredPrepass>,
         ),
+        Has<ScreenSpaceAmbientOcclusion>,
+        Has<DistanceFog>,
         Option<&RenderLayers>,
     )>,
     maybe_batched_instance_buffers: Option<
@@ -505,6 +507,8 @@ fn queue_custom(
         maybe_shadow_filtering_method,
         msaa,
         (normal_prepass, depth_prepass, motion_vector_prepass, deferred_prepass),
+        ssao,
+        distance_fog,
         render_layers,
     ) in &mut views
     {
@@ -514,6 +518,13 @@ fn queue_custom(
             continue;
         };
         let mut view_key = msaa_key | MeshPipelineKey::from_target_format(view.target_format);
+
+        if ssao {
+            view_key |= MeshPipelineKey::SCREEN_SPACE_AMBIENT_OCCLUSION;
+        }
+        if distance_fog {
+            view_key |= MeshPipelineKey::DISTANCE_FOG;
+        }
 
         // Non-HDR views tonemap in-shader, adding bindings to the view layout.
         if !maybe_camera.is_some_and(|camera| camera.hdr) && maybe_tonemapping.is_some() {
