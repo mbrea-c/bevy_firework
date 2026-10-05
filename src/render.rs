@@ -599,13 +599,22 @@ pub fn prepare_firework_bindgroup(
         for (item_entity, firework_images) in &item_query {
             let mut bindgroups = HashMap::new();
             for (view_entity, msaa, view_prepass_textures_opt) in &view_query {
-                let bindgroup_layout = if msaa.samples() > 1 {
+                let prepass_depth = view_prepass_textures_opt.and_then(|vpt| vpt.depth.as_ref());
+                // The depth binding is only read with a depth prepass. Without one, bind a
+                // single-sampled dummy even under MSAA: WebGL2 can't create multisampled
+                // textures with TEXTURE_BINDING (https://github.com/gfx-rs/wgpu/issues/5263).
+                let depth_samples = if prepass_depth.is_some() {
+                    msaa.samples()
+                } else {
+                    1
+                };
+                let bindgroup_layout = if depth_samples > 1 {
                     &firework_uniform_layouts.layout_msaa
                 } else {
                     &firework_uniform_layouts.layout
                 };
 
-                dummy_depth_textures.ensure_has_samples(msaa.samples(), &render_device);
+                dummy_depth_textures.ensure_has_samples(depth_samples, &render_device);
 
                 let DummyTextures {
                     depth_textures,
@@ -638,12 +647,10 @@ pub fn prepare_firework_bindgroup(
                     .map(|img| &img.texture_view)
                     .unwrap_or(orm_texture);
 
-                let prepass_depth_texture_view = if let Some(depth) =
-                    view_prepass_textures_opt.and_then(|vpt| vpt.depth.as_ref())
-                {
+                let prepass_depth_texture_view = if let Some(depth) = prepass_depth {
                     &depth.texture.default_view
                 } else {
-                    depth_textures.get(&msaa.samples()).unwrap()
+                    depth_textures.get(&depth_samples).unwrap()
                 };
 
                 let entries = BindGroupEntries::sequential((
@@ -817,7 +824,10 @@ impl Specializer<RenderPipeline> for FireworkSpecializer {
         descriptor: &mut <RenderPipeline as Specializable>::Descriptor,
     ) -> Result<Canonical<Self::Key>> {
         let view_layout = self.mesh_pipeline.get_view_layout(key.0.into()).clone();
-        let uniform_layout = if key.msaa_samples() > 1 {
+        // Must match the bind group: multisampled depth only when there's a depth prepass.
+        let multisampled_depth =
+            key.msaa_samples() > 1 && key.contains(MeshPipelineKey::DEPTH_PREPASS);
+        let uniform_layout = if multisampled_depth {
             self.uniform_layout_msaa.clone()
         } else {
             self.uniform_layout.clone()
@@ -842,7 +852,7 @@ impl Specializer<RenderPipeline> for FireworkSpecializer {
             shader_defs.push("SHADOW_FILTER_METHOD_TEMPORAL".into());
         }
 
-        if key.msaa_samples() > 1 {
+        if multisampled_depth {
             shader_defs.push("MULTISAMPLED".into());
         }
         if key.contains(MeshPipelineKey::DEPTH_PREPASS) {
