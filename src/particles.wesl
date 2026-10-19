@@ -1,28 +1,19 @@
-#import bevy_pbr::view_transformations::{
-    position_world_to_clip,
-    position_world_to_view,
-    position_view_to_clip,
-    direction_view_to_world,
-}
-#import bevy_pbr::mesh_view_bindings::view
-#import bevy_pbr::pbr_types
-#import bevy_pbr::lighting::LAYER_BASE
-#import bevy_pbr::lighting::LAYER_CLEARCOAT
-#import bevy_pbr::pbr_types::{
-    STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT, 
-    STANDARD_MATERIAL_FLAGS_ALPHA_MODE_BLEND, 
-    STANDARD_MATERIAL_FLAGS_ALPHA_MODE_MULTIPLY, 
-    STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT,
-    STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT,
-    STANDARD_MATERIAL_FLAGS_UNLIT_BIT,
-    pbr_input_new
-}
-#import bevy_pbr::mesh_types::{
-    MESH_FLAGS_SHADOW_RECEIVER_BIT,
-    MESH_FLAGS_TRANSMITTED_SHADOW_RECEIVER_BIT
+import bevy_pbr::render::{
+    view_transformations::{position_world_to_clip, direction_view_to_world},
+    mesh_view_bindings::view,
+    pbr_types::{
+        STANDARD_MATERIAL_FLAGS_DOUBLE_SIDED_BIT,
+        STANDARD_MATERIAL_FLAGS_ALPHA_MODE_BLEND,
+        STANDARD_MATERIAL_FLAGS_FOG_ENABLED_BIT,
+        STANDARD_MATERIAL_FLAGS_ATTENUATION_ENABLED_BIT,
+        pbr_input_new,
+    },
+    mesh_types::{
+        MESH_FLAGS_SHADOW_RECEIVER_BIT,
+        MESH_FLAGS_TRANSMITTED_SHADOW_RECEIVER_BIT,
+    },
+    pbr_functions as fns,
 };
-#import bevy_pbr::pbr_functions as fns
-#import bevy_pbr::pbr_bindings
 
 const FIREWORK_BASE_COLOR_TEXTURE_BIT: u32 = 1u;
 const FIREWORK_NORMAL_MAP_TEXTURE_BIT: u32 = 1u << 1u;
@@ -47,13 +38,10 @@ struct FireworkUniform {
 
 @group(2) @binding(0) var<uniform> firework_uniform: FireworkUniform;
 
-#ifdef DEPTH_PREPASS
-#ifdef MULTISAMPLED
+@if(DEPTH_PREPASS && MULTISAMPLED)
 @group(2) @binding(1) var depth_prepass_texture: texture_depth_multisampled_2d;
-#else // MULTISAMPLED
+@if(DEPTH_PREPASS && !MULTISAMPLED)
 @group(2) @binding(1) var depth_prepass_texture: texture_depth_2d;
-#endif // MULTISAMPLED
-#endif // DEPTH_PREPASS
 
 @group(2) @binding(2)
 var base_color_texture_sampler: sampler;
@@ -146,13 +134,13 @@ fn fragment(in: VertexOutput, @builtin(front_facing) is_front: bool) -> @locatio
         color.a *= edge_blend;
     }
 
-#ifdef DEPTH_PREPASS
-    let depth_scene = prepass_depth(in.position, 0u);
-    let diff = abs(1. / in.position.z - 1. / depth_scene);
-    let scene_blend = smoothstep(0., firework_uniform.fade_scene, diff);
+    @if(DEPTH_PREPASS) {
+        let depth_scene = prepass_depth(in.position, 0u);
+        let diff = abs(1. / in.position.z - 1. / depth_scene);
+        let scene_blend = smoothstep(0., firework_uniform.fade_scene, diff);
 
-    color.a *= scene_blend;
-#endif
+        color.a *= scene_blend;
+    }
 
 
     if color.a == 0. {
@@ -227,26 +215,28 @@ fn pbr_stuff(
 
     var out: vec4<f32>;
 
-    pbr_input.material.base_color = fns::alpha_discard(pbr_input.material, pbr_input.material.base_color);
-#ifdef PREPASS_PIPELINE
-    out = vec4(1., 0., 0., 1.);
-#else
-    out = fns::apply_pbr_lighting(pbr_input);
-    out = fns::main_pass_post_lighting_processing(pbr_input, out);
-#endif
+    pbr_input.material.base_color = fns::alpha_discard(
+        pbr_input.material.flags,
+        pbr_input.material.alpha_cutoff,
+        pbr_input.material.base_color,
+    );
+    @if(PREPASS_PIPELINE) {
+        out = vec4(1., 0., 0., 1.);
+    } @else {
+        out = fns::apply_pbr_lighting(pbr_input);
+        out = fns::main_pass_post_lighting_processing(pbr_input, out);
+    }
 
      return out;
 }
 
-#ifdef DEPTH_PREPASS
+@if(DEPTH_PREPASS)
 fn prepass_depth(frag_coord: vec4<f32>, sample_index: u32) -> f32 {
-#ifdef MULTISAMPLED
+    @if(MULTISAMPLED)
     return textureLoad(depth_prepass_texture, vec2<i32>(frag_coord.xy), i32(sample_index));
-#else // MULTISAMPLED
+    @else
     return textureLoad(depth_prepass_texture, vec2<i32>(frag_coord.xy), 0);
-#endif // MULTISAMPLED
 }
-#endif // DEPTH_PREPASS
 
 
 // ---------------------------------------------

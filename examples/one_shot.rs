@@ -159,7 +159,7 @@ fn setup(
         Hdr,
         Transform::from_xyz(-2.5, 10., 4.0).looking_at(Vec3::new(0., -3., 0.), Vec3::Y),
         Bloom::default(),
-        DepthPrepass::default(),
+        DepthPrepass,
         // For now,Msaa must be disabled on the web due to this:
         // https://github.com/gfx-rs/wgpu/issues/5263
         #[cfg(target_arch = "wasm32")]

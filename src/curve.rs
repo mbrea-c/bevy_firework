@@ -1,5 +1,5 @@
+use bevy::curve::cores::{EvenCore, EvenCoreError, UnevenCore, UnevenCoreError};
 use bevy::prelude::*;
-use cores::{EvenCore, EvenCoreError, UnevenCore, UnevenCoreError};
 use serde::{Deserialize, Serialize};
 
 /// This is just a convenience wrapper over some serializable built-in Bevy curve types

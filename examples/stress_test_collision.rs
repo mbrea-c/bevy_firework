@@ -199,10 +199,10 @@ fn update_debug_info_text(
 }
 
 fn update_fps(mut debug_info: ResMut<DebugInfo>, diagnostics: Res<DiagnosticsStore>) {
-    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS) {
-        if let Some(value) = fps.smoothed() {
-            debug_info.fps = value as f32;
-        }
+    if let Some(fps) = diagnostics.get(&FrameTimeDiagnosticsPlugin::FPS)
+        && let Some(value) = fps.smoothed()
+    {
+        debug_info.fps = value as f32;
     }
 }
 
@@ -217,9 +217,9 @@ fn update_particle_counts(
     for (settings, data) in &particle_systems {
         debug_info.particle_system_count += 1;
         if settings.particle_settings[0].collision_settings.is_some() {
-            debug_info.particle_count_collision += data.particles.get(0).map_or(0, |p| p.len());
+            debug_info.particle_count_collision += data.particles.first().map_or(0, |p| p.len());
         } else {
-            debug_info.particle_count_no_collision += data.particles.get(0).map_or(0, |p| p.len());
+            debug_info.particle_count_no_collision += data.particles.first().map_or(0, |p| p.len());
         }
     }
 }
