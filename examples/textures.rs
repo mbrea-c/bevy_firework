@@ -163,7 +163,6 @@ fn setup(
             ],
             starts_enabled: true,
             spawn_transform_mode: SpawnTransformMode::Local,
-            ..default()
         },
         Transform {
             translation: Vec3::new(-2., 2., 0.),
@@ -226,7 +225,7 @@ fn setup(
         Hdr,
         Transform::from_xyz(0., 8., 0.).looking_at(Vec3::ZERO, Vec3::NEG_Z),
         Bloom::default(),
-        DepthPrepass::default(),
+        DepthPrepass,
         // For now,Msaa must be disabled on the web due to this:
         // https://github.com/gfx-rs/wgpu/issues/5263
         #[cfg(target_arch = "wasm32")]

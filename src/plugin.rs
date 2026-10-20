@@ -36,8 +36,8 @@ impl Plugin for ParticleSystemPlugin {
         load_internal_asset!(
             app,
             PARTICLE_SHADER_HANDLE,
-            "particles.wgsl",
-            Shader::from_wgsl
+            "particles.wesl",
+            Shader::from_wesl
         );
 
         app //
